@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let scene = DebugFlags.scene { await panel.showScene(scene) }
             }
         }
+        ClipsPreview.showIfAsked(env: env)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
