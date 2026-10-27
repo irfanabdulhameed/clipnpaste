@@ -157,6 +157,17 @@ import Foundation
         #expect(read(pb, frontmost: onePassword) == .capture(.text("from iPhone", rtf: nil, html: nil), source: nil))
     }
 
+    @Test func universalClipboardCanBeSwitchedOff() {
+        let pb = FakePasteboard()
+        pb.copy(strings: [PasteboardTypes.plainText: "from iPhone", PasteboardTypes.remote: ""])
+        var off = rules
+        off.captureUniversalClipboard = false
+        #expect(off.read(pb, frontmost: notes) == .skip(.universalClipboard))
+        // A copy made on this Mac is still kept.
+        pb.copy(text: "from this Mac")
+        #expect(off.read(pb, frontmost: notes) == .capture(.text("from this Mac", rtf: nil, html: nil), source: notes))
+    }
+
     // MARK: Building clips
 
     @Test func textClipHashesThePlainText() throws {
