@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment = env
         let panel = PanelController(store: env.store, watcher: env.watcher)
         self.panel = panel
+        OverviewHooks.openPanel = { [weak panel] in panel?.open() }
         // The chosen shortcut (⌃⌘V by default) toggles the panel. A debug run (any check flag) gets no
         // global shortcut (the manager is not live in sandbox mode) and no menu bar icon, so an
         // installed copy that is running keeps ⌃⌘V and nothing it shows changes.
