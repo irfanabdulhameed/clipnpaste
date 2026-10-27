@@ -77,6 +77,25 @@ final class SQLiteDatabase {
         }
     }
 
+    /// Adds `clip_contains(text, needle)`: 1 when `text` contains `needle` ignoring case, with the
+    /// same Unicode rules as `ClipQuery.contains` (SQLite's own LIKE folds ASCII letters only).
+    func addContainsFunction() throws {
+        let rc = sqlite3_create_function_v2(
+            handle, "clip_contains", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nil,
+            { ctx, argc, argv in
+                guard argc == 2, let argv, let a = argv[0], let b = argv[1],
+                      let ha = sqlite3_value_text(a), let nb = sqlite3_value_text(b) else {
+                    sqlite3_result_int(ctx, 0)
+                    return
+                }
+                let hay = String(decoding: UnsafeBufferPointer(start: ha, count: Int(sqlite3_value_bytes(a))), as: UTF8.self)
+                let needle = String(decoding: UnsafeBufferPointer(start: nb, count: Int(sqlite3_value_bytes(b))), as: UTF8.self)
+                sqlite3_result_int(ctx, ClipQuery.contains(hay, needle) ? 1 : 0)
+            },
+            nil, nil, nil)
+        guard rc == SQLITE_OK else { throw failure(rc) }
+    }
+
     /// Rows inserted, changed or deleted since the connection opened.
     var totalChanges: Int { Int(sqlite3_total_changes64(handle)) }
 
