@@ -78,7 +78,11 @@ final class PanelController {
         }
     }
 
+    /// `--self-test`: runs the panel on a given surface without touching the saved setting.
+    var materialOverride: GlassSurface.Material?
+
     var material: GlassSurface.Material {
+        if let m = materialOverride { return m }
         guard useClassicBlur else { return .glass }
         return model.theme.reduceTransparency ? .opaque : .classic
     }

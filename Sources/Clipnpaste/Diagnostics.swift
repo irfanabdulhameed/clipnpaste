@@ -301,3 +301,333 @@ final class Diagnostics: NSObject {
         }
     }
 }
+
+// MARK: - The measure scene and the self-test steps
+
+extension PanelController {
+    /// `--scene measure --measure`: 20 open/close cycles opened the way the shortcut does, an
+    /// interrupted open, a steady scroll along the row, history in, a steady scroll down it and
+    /// out, then a summary against section 7's targets. Quits when done.
+    func runMeasureScene() async {
+        let d = Diagnostics.shared
+        guard d.enabled else {
+            debugLog("the measure scene needs --measure")
+            return
+        }
+        func wait(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+        func until(_ ok: () -> Bool) async {
+            let start = CACurrentMediaTime()
+            while !ok() && CACurrentMediaTime() - start < 4 { await wait(8) }
+        }
+        func idle() async {
+            await until { MotionClock.shared.isIdle }
+            await wait(120)
+        }
+        // A long row and a long history to scroll.
+        let now = Date()
+        for i in 0..<160 {
+            let text = "Measure clip \(i + 1): a line of notes long enough to wrap onto a second line in the card."
+            store.insertOrBump(Clip(kind: .text, plainText: text, sourceBundleID: "com.apple.Notes", sourceAppName: "Notes",
+                                    createdAt: now.addingTimeInterval(-3_600 * Double(i)), contentHash: DemoClips.hash(text)))
+        }
+        await idle()
+        await wait(300)
+        d.reset()
+        for i in 0..<DiagnosticFlags.cycles {
+            d.logRiseFrames = i == 0
+            toggle()
+            await until { phase == .closed }
+            await wait(150)
+            toggle()
+            await until { phase == .open }
+            await idle()
+        }
+        d.logRiseFrames = false
+        // Interrupted: close 90 ms into the rise, re-open 80 ms into the exit.
+        toggle(); await until { phase == .closed }; await wait(150)
+        toggle(); await wait(90)
+        toggle(); await wait(80)
+        toggle(); await until { phase == .open }; await idle()
+        d.note(String(format: "interrupted open re-aimed and parked: y %.2f pt, phase %@", rise.y.v, "\(phase)"))
+
+        await steadyScroll(vertical: false, speed: 1500, seconds: 1.6)
+        board.scroll(to: .zero, instant: true)
+        await idle()
+        toggleHistory()
+        await idle()
+        await steadyScroll(vertical: true, speed: 1500, seconds: 1.6)
+        board.scroll(to: .zero, instant: true)
+        await idle()
+        toggleHistory()
+        await idle()
+        d.summary()
+        NSApp.terminate(nil)
+    }
+
+    /// Scrolls at a constant speed, one step per frame, as a trackpad flick in its steady part.
+    private func steadyScroll(vertical: Bool, speed: Double, seconds: Double) async {
+        let d = Diagnostics.shared
+        var p = board.viewport.origin
+        let start = CACurrentMediaTime()
+        d.begin(.scroll)
+        let hook = MotionClock.shared.addHook { [weak self] dt in
+            guard let self else { return }
+            if vertical { p.y += speed * dt } else { p.x += speed * dt }
+            let m = self.board.maxScroll
+            p = CGPoint(x: min(p.x, m.x), y: min(p.y, m.y))
+            self.board.scrollNow(to: p)
+            d.scrolled()
+        }
+        while CACurrentMediaTime() - start < seconds { try? await Task.sleep(for: .milliseconds(50)) }
+        MotionClock.shared.removeHook(hook)
+        while !MotionClock.shared.isIdle { try? await Task.sleep(for: .milliseconds(20)) }
+        try? await Task.sleep(for: .milliseconds(400))
+    }
+
+    /// Layers in the panel that carry a filter (hidden ones and their children skipped).
+    func filteredLayers() -> [String] {
+        var out: [String] = []
+        func walk(_ l: CALayer) {
+            guard !l.isHidden else { return }
+            if let f = l.filters, !f.isEmpty { out.append(l.delegate.map { "\(type(of: $0))" } ?? "\(type(of: l))") }
+            for s in l.sublayers ?? [] { walk(s) }
+        }
+        if let l = content.layer { walk(l) }
+        if surface.layer?.filters?.isEmpty == false { out.append("glass") }
+        return out
+    }
+
+    /// The panel-level motion steps of `--self-test`: rise, interruption, exit after a paste,
+    /// history in and out, no filters at rest, the toast, and the rise on an opaque surface.
+    func runPanelMotionChecks(_ check: @escaping (String, Bool, String) -> Void) async {
+        func wait(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+        func until(_ ok: () -> Bool) async {
+            let start = CACurrentMediaTime()
+            while !ok() && CACurrentMediaTime() - start < 3 { await wait(8) }
+        }
+        func settle() async {
+            await wait(40)
+            await until { MotionClock.shared.isIdle }
+            await wait(30)
+        }
+        func key(_ code: Int) {
+            if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                        windowNumber: panel.windowNumber, context: nil, characters: "",
+                                        charactersIgnoringModifiers: "", isARepeat: false, keyCode: UInt16(code)) {
+                panel.sendEvent(e)
+            }
+        }
+        func f(_ x: Double) -> String { String(format: "%.2f", x) }
+        let rm = Motion.reduce
+
+        await until { phase == .closed }
+        check("Esc: the exit ends with the panel ordered out", phase == .closed && !panel.isVisible,
+              "phase \(phase), visible \(panel.isVisible)")
+        check("closed: the glass is back at rest for the next open",
+              rise.y.v == 0 && rise.op.v == 1 && cardsInView().allSatisfy { $0.blur.v == 0 }, "y \(rise.y.v), op \(rise.op.v)")
+
+        // The rise, read at every frame it draws.
+        func measureRise(_ label: String) async {
+            var trace: [(t: Double, y: Double)] = []
+            var minY = Double.infinity
+            var glassFiltered = false
+            // Time from the spring's start, as the frames reach the screen.
+            rise.y.probe = { [unowned self] v in
+                trace.append((max(0, MotionClock.shared.lastTarget - Diagnostics.shared.riseStart), v))
+                minY = min(minY, v)
+                if self.surface.layer?.filters?.isEmpty == false { glassFiltered = true }
+            }
+            toggle()
+            let h = rise.travel
+            let cards = cardsInView()
+            trace = [(0, rise.y.v)]
+            check("\(label): on screen at once, drawn in its from-state",
+                  panel.isVisible && phase == .opening && rise.op.v == 0 && (rm ? rise.y.v == 0 : abs(rise.y.v - h) < 0.01),
+                  "visible \(panel.isVisible), y \(rise.y.v) of \(h), op \(rise.op.v)")
+            if rm {
+                check("\(label), Reduce Motion: the cards only fade (no blur, scale or move)",
+                      cards.allSatisfy { $0.blur.v == 0 && $0.es.v == 1 && $0.dy.v == 0 && $0.op.v == 0 }, "")
+            } else {
+                check("\(label): every card in view is born blurred (20 pt, 1.06, 16 pt low, transparent)",
+                      !cards.isEmpty && cards.allSatisfy { $0.blur.v == 20 && $0.es.v == 1.06 && $0.dy.v == 16 && $0.op.v == 0 },
+                      "\(cards.count) cards")
+                await wait(90)
+                let blurs = cards.map(\.blur.v)
+                check("\(label): cards enter 12 ms apart (blur rises with the card's place)",
+                      blurs.count < 2 || (zip(blurs, blurs.dropFirst()).allSatisfy { $0 <= $1 + 1e-9 } && blurs[0] < blurs[blurs.count - 1]),
+                      blurs.map(f).joined(separator: " "))
+            }
+            await settle()
+            rise.y.probe = nil
+            check("\(label): parked at rest and open", phase == .open && rise.y.v == 0 && rise.op.v == 1,
+                  "phase \(phase), y \(rise.y.v), op \(rise.op.v)")
+            check("\(label): 0 pt past the resting position", minY >= 0, "lowest \(f(minY)) pt")
+            if rm {
+                check("\(label), Reduce Motion: no travel at all", trace.allSatisfy { $0.y == 0 }, "")
+            } else {
+                let s = Diagnostics.shape(trace, travel: h)
+                check("\(label): \(f(s.at133 * 100))% of the travel by 133 ms (≥ 70%)", s.at133 >= 0.695, "\(trace.count) frames")
+                check("\(label): parked by 340 ms (\(f(s.at340 * 100))% ≥ 98%)", s.at340 >= 0.98, "")
+            }
+            check("\(label): the glass is never filtered", !glassFiltered && surface.layer?.filters == nil, "")
+        }
+
+        await measureRise("rise")
+        let filtered = filteredLayers()
+        check("at rest no layer in the panel has a filter", filtered.isEmpty, filtered.joined(separator: ", "))
+        check("at rest the glass has no transform and full opacity",
+              surface.layer.map { CATransform3DIsIdentity($0.transform) && $0.opacity == 1 } ?? false, "")
+
+        // Interruption: the shortcut mid-rise turns it around; again mid-exit it turns back.
+        toggle()
+        await until { phase == .closed }
+        await wait(120)
+        var maxAfterReaim = -Double.infinity, minAfterReaim = Double.infinity
+        var reaimed = false
+        var watching = false
+        var stayedVisible = true
+        rise.y.probe = { [unowned self] v in
+            if reaimed { maxAfterReaim = max(maxAfterReaim, v); minAfterReaim = min(minAfterReaim, v) }
+            if watching && (!self.panel.isVisible || self.phase == .closed) { stayedVisible = false }
+        }
+        toggle()
+        watching = true
+        let h = rise.travel
+        await wait(80)
+        let y1 = rise.y.v, op1 = rise.op.v
+        toggle()
+        check("mid-rise: the shortcut turns it around from where it is (no jump)",
+              phase == .closing && rise.y.v == y1 && rise.op.v == op1 && panel.isVisible,
+              "phase \(phase), y \(f(rise.y.v)) vs \(f(y1))")
+        await wait(rm ? 50 : 90)
+        let y2 = rise.y.v, op2 = rise.op.v
+        if rm {
+            check("mid-rise under Reduce Motion: the fade reverses", op2 < op1 && y2 == 0, "op \(f(op1)) → \(f(op2))")
+        } else {
+            check("mid-exit: it carried its speed, then accelerated away", y2 > y1 && y2 < h, "y \(f(y1)) → \(f(y2)) of \(f(h))")
+        }
+        reaimed = true
+        toggle()
+        check("mid-exit: the shortcut re-aims it at once (no restart, not ordered out)",
+              phase == .opening && rise.y.v == y2 && rise.op.v == op2 && panel.isVisible, "phase \(phase), y \(f(rise.y.v))")
+        await settle()
+        rise.y.probe = nil
+        check("re-aimed: parked at rest with 0 pt overshoot, never ordered out",
+              phase == .open && rise.y.v == 0 && minAfterReaim >= 0 && stayedVisible, "lowest \(f(minAfterReaim)), visible \(stayedVisible)")
+        if !rm {
+            check("re-aimed: never restarted from below the screen", maxAfterReaim < h - 1, "highest \(f(maxAfterReaim)) of \(f(h))")
+        }
+
+        // Exit after a paste: same exit, faster than the rise, accelerating.
+        var samples: [(t: Double, y: Double)] = []
+        rise.y.probe = { v in samples.append((MotionClock.shared.lastTarget, v)) }
+        pasteInterceptor = { _ in }
+        interceptedPasteCloses = true
+        let tp = CACurrentMediaTime()
+        key(kVK_Return)
+        check("paste: the panel leaves on its exit (still on screen, clicks pass through)",
+              phase == .closing && panel.isVisible, "phase \(phase)")
+        await until { phase == .closed }
+        let exitMs = (CACurrentMediaTime() - tp) * 1000
+        rise.y.probe = nil
+        pasteInterceptor = nil
+        interceptedPasteCloses = false
+        check("paste: ordered out after \(Int(exitMs)) ms (exit 180 ms, the rise takes 340)",
+              !panel.isVisible && exitMs < 300, "")
+        if rm {
+            check("paste under Reduce Motion: a fade, no travel", samples.allSatisfy { $0.y == 0 }, "")
+        } else {
+            let moving = samples.filter { $0.y > 0 }
+            let ok = moving.count >= 4 && zip(moving, moving.dropFirst()).allSatisfy { $0.y <= $1.y }
+            var faster = false
+            if ok {
+                let a = moving[0], b = moving[1], c = moving[moving.count - 2], e = moving[moving.count - 1]
+                let v0 = (b.y - a.y) / max(b.t - a.t, 1e-3), v1 = (e.y - c.y) / max(e.t - c.t, 1e-3)
+                faster = v1 > 2 * v0
+            }
+            check("paste: the exit only goes down, and accelerates away", ok && faster,
+                  moving.map { String(format: "%.3f:%.1f", $0.t - (moving.first?.t ?? 0), $0.y) }.joined(separator: " "))
+        }
+
+        // History in and out. Fresh copies first, so the row's front and history's top (by
+        // date) are the same cards, as in daily use.
+        let now = Date()
+        for i in 0..<30 {
+            let text = "Fresh clip \(30 - i) for the history check."
+            store.insertOrBump(Clip(kind: .text, plainText: text, sourceBundleID: "com.apple.Notes", sourceAppName: "Notes",
+                                    createdAt: now.addingTimeInterval(Double(i) - 30), contentHash: DemoClips.hash(text)))
+        }
+        toggle()
+        await settle()
+        func inView() -> Set<UUID> { Set(cardsInView().map(\.id)) }
+        /// Every card whose blur goes above 0 while it runs.
+        func watch() -> (blurred: () -> Set<UUID>, stop: () -> Void) {
+            var seen = Set<UUID>()
+            let hook = MotionClock.shared.addHook { [unowned self] _ in
+                for (id, m) in self.board.motions where m.blur.v > 0.05 { seen.insert(id) }
+            }
+            return ({ seen }, { MotionClock.shared.removeHook(hook) })
+        }
+        let rowIDs = inView()
+        var w = watch()
+        toggleHistory()
+        await settle()
+        w.stop()
+        let histIDs = inView()
+        var carried = rowIDs.intersection(histIDs), born = histIDs.subtracting(rowIDs)
+        check("history in: the first row is carried, never blurred", !carried.isEmpty && w.blurred().isDisjoint(with: carried),
+              "\(carried.count) carried, \(w.blurred().intersection(carried).count) blurred")
+        if rm {
+            check("history in, Reduce Motion: the new rows fade, never blur", w.blurred().isEmpty, "")
+        } else {
+            check("history in: the rows below are born blurred", !born.isEmpty && born.isSubset(of: w.blurred()),
+                  "\(born.count) born, \(born.intersection(w.blurred()).count) blurred")
+        }
+        var left = filteredLayers()
+        check("history in: no filter left at rest", left.isEmpty, left.joined(separator: ", "))
+        w = watch()
+        toggleHistory()
+        await settle()
+        w.stop()
+        let backIDs = inView()
+        carried = histIDs.intersection(backIDs)
+        let gone = histIDs.subtracting(backIDs)
+        check("history out: the first row is carried back, never blurred", !carried.isEmpty && w.blurred().isDisjoint(with: carried), "")
+        if rm {
+            check("history out, Reduce Motion: instant, no blur", w.blurred().isEmpty, "")
+        } else {
+            check("history out: the rows below blur out", !gone.isEmpty && gone.isSubset(of: w.blurred()),
+                  "\(gone.count) leaving, \(gone.intersection(w.blurred()).count) blurred")
+        }
+        left = filteredLayers()
+        check("history out: no filter left at rest", left.isEmpty, left.joined(separator: ", "))
+
+        // The toast: born blurred, leaves after 1.6 s.
+        showToast(on: screen)
+        let fx = toast.fx
+        check("toast: born \(rm ? "transparent (a fade only)" : "blurred: text 12 pt, capsule 1.06, transparent")",
+              toast.isVisible && fx.op.v == 0 && (rm ? fx.blur.v == 0 && fx.scale.v == 1 : fx.blur.v == 12 && fx.scale.v == 1.06),
+              "op \(fx.op.v), blur \(fx.blur.v), scale \(fx.scale.v)")
+        await settle()
+        check("toast: sharp at rest, no filter", fx.blur.v == 0 && fx.scale.v == 1 && fx.op.v == 1 && !toast.textHasFilter, "")
+        await wait(Int(Toast.holdMs) + 300)
+        check("toast: leaves after 1.6 s and is ordered out", !toast.isVisible, "")
+
+        // Reduce Transparency's opaque surface: the same motion. (A real switch warms the new
+        // surface while closed; here one open and close does it.)
+        materialOverride = .opaque
+        applyDisplayOptions()
+        toggle()
+        await until { phase == .closed }
+        toggle()
+        await settle()
+        toggle()
+        await until { phase == .closed }
+        await wait(100)
+        await measureRise("opaque surface")
+        check("opaque surface: it really was the opaque one", surface.material == .opaque, "\(surface.material)")
+        materialOverride = nil
+        applyDisplayOptions()
+        await settle()
+    }
+}
