@@ -14,6 +14,8 @@ enum DebugFlags {
     static let demoStates = args.contains("--demo-states")
     /// Starts with no clips, to see the first-use state.
     static let empty = args.contains("--empty")
+    /// Any flag that must not touch the real history or clipboard.
+    static var usesDemoStore: Bool { selfTest || showPanel || demoExtra || demoStates || empty }
     static let reduceTransparency = args.contains("--reduce-transparency")
     static let increaseContrast = args.contains("--increase-contrast")
     static let reduceMotion = args.contains("--reduce-motion")

@@ -10,16 +10,18 @@ struct AppEnvironment {
     let watcher: any ClipboardWatcher
 
     static func make() throws -> AppEnvironment {
-        // ── Replaced at merge ──────────────────────────────────────────────
-        // When capture and SQLite storage land, this block becomes:
-        //     let store = try SQLiteClipStore(directory: SQLiteClipStore.defaultDirectory)
-        //     let watcher = PasteboardWatcher(store: store)
-        //     watcher.start()
-        let store = InMemoryClipStore(clips: DebugFlags.empty ? [] : DemoClips.make())
-        if DebugFlags.demoExtra { DemoExtras.add(to: store) }
-        let watcher = NoOpWatcher()
+        // Any debug or demo flag keeps the in-memory store and no watcher, so checks never
+        // touch the real history or clipboard.
+        if DebugFlags.usesDemoStore {
+            let store = InMemoryClipStore(clips: DebugFlags.empty ? [] : DemoClips.make())
+            if DebugFlags.demoExtra { DemoExtras.add(to: store) }
+            let watcher = NoOpWatcher()
+            watcher.start()
+            return AppEnvironment(store: store, watcher: watcher)
+        }
+        let store = try SQLiteClipStore(directory: SQLiteClipStore.defaultDirectory)
+        let watcher = PasteboardWatcher(store: store)
         watcher.start()
-        // ── End of the merge block ─────────────────────────────────────────
         return AppEnvironment(store: store, watcher: watcher)
     }
 

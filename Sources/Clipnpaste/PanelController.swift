@@ -26,8 +26,6 @@ final class PanelController {
     /// The app that was in front when the panel opened; the paste goes there.
     private var previousApp: NSRunningApplication?
     private var press: Press?
-    /// Copied clips move to the front the next time the panel opens.
-    private var pendingBumps: [UUID] = []
     private var markTokens: [UUID: UUID] = [:]
     private weak var scrollView: NSScrollView?
 
@@ -105,7 +103,7 @@ final class PanelController {
         let started = CACurrentMediaTime()
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
-        applyPendingBumps()
+        (watcher as? PasteboardWatcher)?.checkNow()
         layout(on: mouseScreen())
         applyDisplayOptions()
         model.now = Date()
@@ -150,7 +148,7 @@ final class PanelController {
         guard let screen else { return }
         self.screen = screen
         let vf = screen.visibleFrame
-        let g = PanelGeometry(visibleWidth: Int(vf.width), visibleHeight: Int(vf.height))
+        let g = PanelGeometry(visibleWidth: Int(vf.width), visibleHeight: Int(vf.height), screenHeight: Int(screen.frame.height))
         if g != model.geometry { model.geometry = g }
         let inset = CGFloat(PanelGeometry.inset)
         let frame = NSRect(x: vf.minX.rounded(.down), y: vf.minY.rounded(.down), width: CGFloat(Int(vf.width)),
@@ -185,17 +183,6 @@ final class PanelController {
             model.selectedID = clips.first?.id
             model.focus = .card
         }
-    }
-
-    private func applyPendingBumps() {
-        guard !pendingBumps.isEmpty else { return }
-        let clips = store.ordered(Self.clipLimit)
-        for id in pendingBumps {
-            guard var clip = clips.first(where: { $0.id == id }) else { continue }
-            clip.createdAt = Date()
-            store.insertOrBump(clip)
-        }
-        pendingBumps = []
     }
 
     // MARK: Events
@@ -500,7 +487,6 @@ final class PanelController {
         if let count = Paster.write(clip) {
             watcher.markOwnWrite(changeCount: count)
             model.marks[id] = .done
-            if !pendingBumps.contains(id) { pendingBumps.append(id) }
         } else {
             model.marks[id] = .failed
         }
@@ -549,11 +535,11 @@ final class PanelController {
         debugLog("open took \(String(format: "%.1f", ms)) ms; key \(panel.isKeyWindow); front app \(previousApp?.localizedName ?? "none")")
         debugLog("screen \(screen.frame) visible \(vf) scale \(screen.backingScaleFactor)")
         debugLog("window \(panel.frame); glass on screen \(glass)")
-        debugLog("panel height \(g.height) = visible height \(Int(vf.height)) ÷ 6 → \(Int(vf.height) / 6); width \(g.width)")
+        debugLog("panel height \(g.height) = screen height \(Int(screen.frame.height)) ÷ 6 → \(Int(screen.frame.height) / 6); width \(g.width)")
         debugLog("cards \(g.cardWidth) × \(g.cardHeight), \(g.layout.count) across, gap \(CardLayout.gap), side padding \(g.sidePadding), lines \(g.lines), rows that fit \(g.layout.rows(forHeight: g.visibleHeight - 2 * PanelGeometry.inset))")
         debugLog("clips \(model.clips.count); material \(material); theme \(model.theme)")
         for other in NSScreen.screens where other != screen {
-            let v = other.visibleFrame, o = PanelGeometry(visibleWidth: Int(v.width), visibleHeight: Int(v.height))
+            let v = other.visibleFrame, o = PanelGeometry(visibleWidth: Int(v.width), visibleHeight: Int(v.height), screenHeight: Int(other.frame.height))
             debugLog("on \(Int(other.frame.width))×\(Int(other.frame.height)) (visible \(Int(v.width))×\(Int(v.height))): panel \(o.width)×\(o.height), cards \(o.cardWidth)×\(o.cardHeight), \(o.layout.count) across, side padding \(o.sidePadding), lines \(o.lines)")
         }
     }
