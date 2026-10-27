@@ -25,8 +25,8 @@ struct PanelGeometry: Equatable {
     /// Text lines a card shows.
     let lines: Int
 
-    init(visibleWidth: Int, visibleHeight: Int) {
-        let l = CardLayout(visibleWidth: visibleWidth, visibleHeight: visibleHeight)
+    init(visibleWidth: Int, visibleHeight: Int, screenHeight: Int? = nil) {
+        let l = CardLayout(visibleWidth: visibleWidth, visibleHeight: visibleHeight, screenHeight: screenHeight)
         layout = l
         self.visibleHeight = visibleHeight
         width = visibleWidth - 2 * Self.inset

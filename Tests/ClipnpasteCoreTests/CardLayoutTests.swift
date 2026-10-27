@@ -18,6 +18,14 @@ import Testing
         #expect(l.panelHeight == 240)
     }
 
+    @Test func panelIsASixthOfTheFullScreenHeight() {
+        // 1080 screen with a 1050 visible frame (menu bar): 180, not 175.
+        let l = CardLayout(visibleWidth: 1920, visibleHeight: 1050, screenHeight: 1080)
+        #expect(l.panelHeight == 180 && l.cardHeight == 140 && l.cardWidth == 224)
+        let q = CardLayout(visibleWidth: 2560, visibleHeight: 1410, screenHeight: 1440)
+        #expect(q.panelHeight == 240 && q.cardHeight == 200 && q.cardWidth == 304)
+    }
+
     @Test func narrowScreenKeepsFourCards() {
         let l = CardLayout(visibleWidth: 900, visibleHeight: 1080)
         #expect(l.count == 4)

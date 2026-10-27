@@ -14,10 +14,11 @@ public struct CardLayout: Sendable, Equatable {
     public let cardHeight: Int
     public let count: Int
 
-    /// - Parameters: the screen's visible frame size in points.
-    public init(visibleWidth: Int, visibleHeight: Int) {
+    /// - Parameters: the screen's visible frame size in points; `screenHeight` is the full
+    ///   screen height, a sixth of which is the panel height (default: the visible height).
+    public init(visibleWidth: Int, visibleHeight: Int, screenHeight: Int? = nil) {
         let g = Self.gap
-        let panel = visibleHeight / 6
+        let panel = min((screenHeight ?? visibleHeight) / 6, visibleHeight)
         let h = max(panel - Self.topBar - Self.bottomPadding, 1)
         let side = Self.margin + Self.gap
         let avail = max(visibleWidth - 2 * side, 1)
