@@ -464,13 +464,23 @@ final class Board {
         cells[m.id] = cell
     }
 
+    /// A put-away cell shows nothing, so it neither draws nor re-renders when the model changes
+    /// (with a few hundred cells kept bound to old clips, every hover cost 60 ms). The pool keeps
+    /// enough for a full 3-row panel; the rest are let go.
     private func detach(_ m: CardMotion) {
         guard let cell = m.cell else { return }
         m.cell = nil
         cells[m.id] = nil
         cell.isHidden = true
-        pool.append(cell)
+        cell.clear()
+        if pool.count < Self.poolLimit {
+            pool.append(cell)
+        } else {
+            cell.removeFromSuperview()
+        }
     }
+
+    static let poolLimit = 32
 
     /// Drops every card and cell (the panel closed or the screen changed).
     func reset() {
