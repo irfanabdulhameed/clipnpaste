@@ -41,21 +41,6 @@ struct HistoryState {
     var token = 0
 }
 
-/// Small preferences. A debug run keeps them in memory, so checks never touch the installed app's settings.
-@MainActor
-enum Prefs {
-    private static var volatile: [String: Int] = [:]
-
-    static func int(_ key: String) -> Int? {
-        if DebugFlags.usesDemoStore { return volatile[key] }
-        return UserDefaults.standard.object(forKey: key) as? Int
-    }
-
-    static func set(_ value: Int, _ key: String) {
-        if DebugFlags.usesDemoStore { volatile[key] = value } else { UserDefaults.standard.set(value, forKey: key) }
-    }
-}
-
 extension PanelController {
     // MARK: Glass
 
@@ -147,18 +132,24 @@ extension PanelController {
 
     // MARK: Rows
 
-    private var rowsKey: String {
-        guard let s = screen else { return "rows" }
-        return "rows.\(Int(s.frame.width))x\(Int(s.frame.height))"
-    }
-
-    /// The row count is remembered per screen.
+    /// Rows the panel opens at (Settings › Panel › Height), up to what fits the screen.
     func savedRows() -> Int {
-        let g = model.geometry.grid
-        return min(max(Prefs.int(rowsKey) ?? 1, 1), g.maxRows)
+        min(max(prefs.panelRows, 1), model.geometry.grid.maxRows)
     }
 
-    private func saveRows() { Prefs.set(rows, rowsKey) }
+    /// The pill and ⌥↑ / ⌥↓ set the height Settings shows. A screen too short for the setting
+    /// leaves it alone.
+    private func saveRows() {
+        if savedRows() != rows { prefs.panelRows = rows }
+    }
+
+    /// The height changed in Settings: an open panel moves to it on `settle`, as ⌥↑ / ⌥↓ do; a
+    /// closed one, or one in history or mid-gesture, opens at it next time.
+    func applyRowsSetting() {
+        let k = savedRows()
+        guard k != rows, isOpen, model.mode != .history else { return }
+        stepRows(k - rows)
+    }
 
     /// The viewport of the scroll area for a glass height, with the scroll folded out.
     func viewAt(height h: Double) -> CGRect {
@@ -374,6 +365,50 @@ extension PanelController {
     }
 
     // MARK: Strip
+
+    /// The dragged card left the panel: the panel shrinks to the strip, slides away or stays,
+    /// as Settings › Motion › Panel while dragging out says.
+    func cardLeftPanel() {
+        switch prefs.dragOut {
+        case .strip: enterStrip()
+        case .slide: slideAway()
+        case .stay: break
+        }
+    }
+
+    /// Back to full height, from the strip or from sliding away.
+    func restorePanel() {
+        switch strip {
+        case .strip: exitStrip()
+        case .slid: slideBack()
+        case .full: break
+        }
+    }
+
+    /// "Slide away": the whole panel leaves as it does on close, accelerating down by its height
+    /// + 40 pt on `leave` over 180 ms, so the screen is free for the drop. Reduce Motion: a 120 ms fade.
+    func slideAway() {
+        guard strip == .full else { return }
+        strip = .slid
+        if Motion.reduce {
+            rise.op.tween(to: 0, ms: 120)
+        } else {
+            rise.y.tween(to: glass.h.v + Self.riseExtra, ms: 180, ease: Motion.leave, carry: true)
+        }
+        updateChrome()
+    }
+
+    /// The card came back over the bottom edge: the panel rises back on `arrive`, as when it opens.
+    func slideBack() {
+        guard strip == .slid else { return }
+        strip = .full
+        if Motion.reduce {
+            rise.op.tween(to: 1, ms: 120)
+        } else {
+            rise.y.spring(to: 0, duration: Motion.arrive)
+        }
+        updateChrome()
+    }
 
     /// The dragged card crossed the panel's top edge: the panel shrinks to a 40 pt glass strip
     /// holding the pill, and the cards accelerate out with a blur.

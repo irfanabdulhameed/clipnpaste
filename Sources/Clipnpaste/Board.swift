@@ -614,7 +614,8 @@ final class Board {
         // Now, so the slide starts on the same frame as the scroll to the selection and they move in step.
         renderRing()
         guard !Motion.reduce, let m = motions[id] else { return }
-        if pop == .force || (pop == .normal && !held) { m.pop.pop() }
+        // 1.08 or 1.03, from Settings › Motion › Card pop.
+        if pop == .force || (pop == .normal && !held) { m.pop.pop(Preferences.app.cardPop) }
     }
 
     /// Draws the ring around the selected card. When the selection changes while the ring shows,
@@ -622,8 +623,8 @@ final class Board {
     /// keeping the speed it had, so a key that repeats re-aims it mid-flight and a held arrow key
     /// glides. If the new card is itself still moving into place (the neighbour closing the gap
     /// after a remove), the offset springs on `settle`, the card's own spring, so the ring holds
-    /// still while the card slides into it. Under Reduce Motion, or when it wasn't showing, it
-    /// appears on the card at once.
+    /// still while the card slides into it. Under Reduce Motion, when it wasn't showing, or with
+    /// Settings › Motion › Selection change set to One-frame flip, it appears on the card at once.
     func renderRing() {
         let r = ring
         guard let id = model.selectedID, let m = motions[id], !m.leaving, !m.gone else {
@@ -637,7 +638,7 @@ final class Board {
         if r.cardID != id {
             let from = r.cardID != nil && !r.view.isHidden ? r.drawn : nil
             r.cardID = id
-            if let from, !Motion.reduce {
+            if let from, !Motion.reduce, Preferences.app.selection == .slide {
                 let duration = m.x.busy || m.y.busy ? Motion.settle : Motion.quick
                 for (a, d) in [(r.ox, from.x - m.x.v), (r.oy, from.y - m.y.v)] {
                     let v = a.velocity

@@ -71,6 +71,8 @@ public enum SkipReason: Sendable, Equatable {
     case tooLarge
     case blank
     case unsupported
+    /// A Universal Clipboard copy while those are switched off.
+    case universalClipboard
 }
 
 public enum CaptureResult: Sendable, Equatable {
@@ -102,6 +104,8 @@ public struct CaptureRules: Sendable {
     public var ignoredApps: Set<String>
     /// Our own bundle id; a copy tagged with it is our own write.
     public var ownBundleID: String?
+    /// Keep copies made on an iPhone or iPad (Universal Clipboard).
+    public var captureUniversalClipboard = true
 
     public init(
         ignoredApps: Set<String> = CaptureRules.passwordManagers,
@@ -116,6 +120,7 @@ public struct CaptureRules: Sendable {
         let types = pb.types
         if types.isEmpty { return .skip(.empty) }
         if let marker = PasteboardTypes.skipMarkers.first(where: types.contains) { return .skip(.marker(marker)) }
+        if !captureUniversalClipboard, types.contains(PasteboardTypes.remote) { return .skip(.universalClipboard) }
 
         let source = sourceApp(pb, types: types, frontmost: frontmost)
         if let id = source?.bundleID?.lowercased() {

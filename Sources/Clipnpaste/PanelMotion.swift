@@ -130,10 +130,12 @@ extension PanelController {
     }
 
     /// Cards in view, in reading order, each born blurred: 20 → 0 pt blur, 1.06 → 1, 16 pt rise,
-    /// on `settle`, 40 ms + 12 ms × its place. The selection ring rides its card.
+    /// on `settle`, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
+    /// entrance is Together. The selection ring rides its card.
     private func entrance() {
+        let stagger = prefs.entrance == .stagger ? 12.0 : 0
         for (i, m) in cardsInView().enumerated() {
-            board.born(m, blur: 20, delay: 40 + 12 * Double(i), scale: 1.06, rise: 16)
+            board.born(m, blur: 20, delay: 40 + stagger * Double(i), scale: 1.06, rise: 16)
         }
         if model.clips.isEmpty { content.emptyFx.born(blur: 20, delay: 40, scale: 1.06) }
     }

@@ -56,9 +56,10 @@ final class MotionClock: NSObject {
     private var nextHook = 0
     /// When the frame being drawn reaches the screen (the display link's target time).
     private(set) var lastTarget: CFTimeInterval = 0
-    /// `--slow-motion N` divides time by N, so every motion (panel and cards) slows together
-    /// (debug screenshots only); 1 otherwise.
-    let timeScale = DebugFlags.slowMotion
+    /// `--slow-motion N`, or Slow motion ×5 in Settings, divides time by N, so every motion (panel
+    /// and cards) slows together, for inspecting curves; 1 otherwise. Read every frame, so the
+    /// switch applies at once.
+    var timeScale: Double { max(DebugFlags.slowMotion, Preferences.app.slowMotion ? 5 : 1) }
     private var inFrame = false
     private weak var screen: NSScreen?
 

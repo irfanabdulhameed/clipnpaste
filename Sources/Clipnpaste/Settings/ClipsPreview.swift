@@ -220,7 +220,14 @@ enum ClipsSelfCheck {
         let missing = images[3]
         try? FileManager.default.removeItem(at: missing.imageURL!)
 
-        let env = AppEnvironment(store: store, watcher: NoOpWatcher())
+        // Its own throwaway preferences with auto-clear off: the demo clips reach back past 30 days.
+        let suite = "com.irfanabdulhameed.clipnpaste.debug.clips-check"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let prefs = Preferences(defaults: defaults)
+        prefs.autoClearDays = 0
+        let env = AppEnvironment(store: store, watcher: NoOpWatcher(), preferences: prefs, dataFolder: dir)
+        defer { defaults.removePersistentDomain(forName: suite) }
         var copied: [UUID] = []
         var revealed: [URL] = []
         let model = ClipsModel(store: env.store, watcher: env.watcher)

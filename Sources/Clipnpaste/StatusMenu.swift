@@ -12,6 +12,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let loginNoteItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let accessibilityItem = NSMenuItem(title: "", action: #selector(openAccessibility), keyEquivalent: "")
     private let classicItem = NSMenuItem(title: "Use classic blur", action: #selector(toggleClassicBlur), keyEquivalent: "")
+    private let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+    /// Opens the Settings window.
+    var onOpenSettings: (() -> Void)?
+    /// Settings › General › Show menu-bar icon.
+    var isVisible: Bool {
+        get { item.isVisible }
+        set { item.isVisible = newValue }
+    }
     private let panel: PanelController
     private let shortcuts: ShortcutController
     private var loginError: String?
@@ -22,7 +30,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         super.init()
         item.button?.image = MenuBarGlyph.image()
         accessibilityItem.toolTip = "Open Accessibility in System Settings"
-        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem] { i.target = self }
+        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem, settingsItem] { i.target = self }
 
         let menu = NSMenu()
         menu.delegate = self
@@ -35,6 +43,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(accessibilityItem)
         menu.addItem(classicItem)
         menu.addItem(.separator())
+        menu.addItem(settingsItem)
         menu.addItem(withTitle: "Quit Clipnpaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         shortcuts.onChange = { [weak self] in self?.refresh() }
@@ -80,6 +89,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func openAccessibility() { Paster.openAccessibilitySettings() }
     @objc private func toggleClassicBlur() { panel.useClassicBlur.toggle() }
     @objc private func openLoginSettings() { LaunchAtLogin.openSettings() }
+    @objc private func openSettings() { onOpenSettings?() }
 
     @objc private func toggleLogin() {
         loginError = nil

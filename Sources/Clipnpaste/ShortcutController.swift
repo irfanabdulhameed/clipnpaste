@@ -24,6 +24,8 @@ final class ShortcutController {
 
     /// Called whenever the shortcut changes, so the menu can show the new label.
     var onChange: (() -> Void)?
+    /// Posted whenever the shortcut changes, for Settings.
+    static let didChange = Notification.Name("ClipnpasteShortcutDidChange")
 
     func start() {
         hotKeys.start()
@@ -35,6 +37,7 @@ final class ShortcutController {
         guard hotKeys.change(to: s) else { return false }
         store.save(s)
         onChange?()
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         return true
     }
 
