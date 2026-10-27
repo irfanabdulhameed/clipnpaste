@@ -19,30 +19,44 @@ public final class SQLiteClipStore: ClipStore {
     public var maxClips: Int { didSet { enforceRetention() } }
     /// Keep image files (originals and thumbnails) under this many bytes, dropping the oldest images first.
     public var maxImageBytes: Int64 { didSet { enforceRetention() } }
+    /// Auto-clear: remove clips last copied longer ago than this (nil keeps them). Runs when set,
+    /// at launch (pass it to `init`) and about hourly while it is on.
+    public var maxAge: TimeInterval? {
+        didSet {
+            guard maxAge != oldValue else { return }
+            enforceRetention()
+            scheduleAgeSweep()
+        }
+    }
 
     let db: SQLiteDatabase
     /// The first clips in panel order (ascending sortKey).
     private var cache: [Clip] = []
     private var total = 0
     private var observers: [UUID: ClipStoreObserver] = [:]
+    private let ageSweep = RetentionTimer()
 
     public init(
         directory: URL,
         maxClips: Int = SQLiteClipStore.defaultMaxClips,
-        maxImageBytes: Int64 = SQLiteClipStore.defaultMaxImageBytes
+        maxImageBytes: Int64 = SQLiteClipStore.defaultMaxImageBytes,
+        maxAge: TimeInterval? = nil
     ) throws {
         let files = ClipFiles(root: directory)
         try files.createDirectories()
         self.files = files
         self.maxClips = maxClips
         self.maxImageBytes = maxImageBytes
+        self.maxAge = maxAge
         db = try SQLiteDatabase(path: files.root.appending(path: "clips.sqlite").path)
         try db.execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-8000;")
         try db.execute(Self.schema)
+        try db.addContainsFunction()
         total = try db.query("SELECT COUNT(*) FROM clips") { $0.int(0) ?? 0 }.first ?? 0
         cache = try fetch("ORDER BY \(Self.panelOrder) LIMIT ?", [.int(Int64(Self.cacheLimit))])
         enforceRetention()
         removeOrphanFiles()
+        scheduleAgeSweep()
     }
 
     // MARK: Reading
@@ -154,6 +168,162 @@ public final class SQLiteClipStore: ClipStore {
         for o in observers.values { o(change) }
     }
 
+    // MARK: Settings: summary, search and bulk changes
+
+    public func countsByKind() -> ClipCounts {
+        let rows = (try? db.query("SELECT kind, COUNT(*) FROM clips GROUP BY kind") { ($0.string(0), $0.int(1) ?? 0) }) ?? []
+        var counts = ClipCounts()
+        for (kind, n) in rows {
+            switch kind.flatMap(ClipKind.init(rawValue:)) {
+            case .text: counts.text += n
+            case .image: counts.image += n
+            case nil: break
+            }
+        }
+        return counts
+    }
+
+    public func storedImageBytes() -> Int64 {
+        (try? db.query("SELECT COALESCE(SUM(image_bytes), 0) FROM clips") { $0.int64(0) }.first) ?? 0
+    }
+
+    public func copyCount(from start: Date, to end: Date) -> Int {
+        let args: [SQLiteValue] = [.double(start.timeIntervalSinceReferenceDate), .double(end.timeIntervalSinceReferenceDate)]
+        return (try? db.query("SELECT COUNT(*) FROM clips WHERE created_at >= ? AND created_at < ?", args) { $0.int(0) ?? 0 }.first) ?? 0
+    }
+
+    public func topSources(since date: Date, limit: Int) -> [SourceAppCount] {
+        let sql = """
+            SELECT source_bundle_id, MAX(source_app_name), COUNT(*) AS n, MAX(created_at) AS latest FROM clips
+            WHERE created_at >= ? AND (source_bundle_id IS NOT NULL OR source_app_name IS NOT NULL)
+            GROUP BY COALESCE(source_bundle_id, source_app_name)
+            ORDER BY n DESC, latest DESC LIMIT ?
+            """
+        let args: [SQLiteValue] = [.double(date.timeIntervalSinceReferenceDate), .int(Int64(max(limit, 0)))]
+        return (try? db.query(sql, args) { r in
+            let id = r.string(0)
+            return SourceAppCount(bundleID: id, name: r.string(1) ?? id ?? "", count: r.int(2) ?? 0)
+        }) ?? []
+    }
+
+    public func search(_ query: ClipQuery, offset: Int, limit: Int) -> [Clip] {
+        let (whereSQL, args) = Self.filter(query)
+        let order = query.order == .panel ? Self.panelOrder : "created_at DESC, id"
+        let all = args + [.int(Int64(max(limit, 0))), .int(Int64(max(offset, 0)))]
+        return (try? fetch("\(whereSQL) ORDER BY \(order) LIMIT ? OFFSET ?", all)) ?? []
+    }
+
+    public func count(matching query: ClipQuery) -> Int {
+        let (whereSQL, args) = Self.filter(query)
+        if whereSQL.isEmpty { return total }
+        return (try? db.query("SELECT COUNT(*) FROM clips \(whereSQL)", args) { $0.int(0) ?? 0 }.first) ?? 0
+    }
+
+    /// The WHERE clause for a query. An ASCII needle uses LIKE (fast, folds ASCII case); any other
+    /// uses `clip_contains`, which folds case the way Swift does.
+    private static func filter(_ query: ClipQuery) -> (String, [SQLiteValue]) {
+        var parts: [String] = []
+        var args: [SQLiteValue] = []
+        if let kind = query.kind {
+            parts.append("kind = ?")
+            args.append(.text(kind.rawValue))
+        }
+        let needle = query.needle
+        if !needle.isEmpty {
+            if needle.allSatisfy(\.isASCII) {
+                let escaped = needle.replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+                parts.append("plain_text LIKE ? ESCAPE '\\'")
+                args.append(.text("%\(escaped)%"))
+            } else {
+                parts.append("clip_contains(plain_text, ?)")
+                args.append(.text(needle))
+            }
+        }
+        return (parts.isEmpty ? "" : "WHERE " + parts.joined(separator: " AND "), args)
+    }
+
+    public func remove(ids: [UUID]) {
+        let unique = Array(Set(ids))
+        guard !unique.isEmpty else { return }
+        var doomed: [Clip] = []
+        do {
+            for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ", ")
+                doomed += try fetch("WHERE id IN (\(marks))", chunk.map { .text($0.uuidString) })
+            }
+            guard !doomed.isEmpty else { return }
+            try db.transaction {
+                for clip in doomed { try db.run("DELETE FROM clips WHERE id = ?", [.text(clip.id.uuidString)]) }
+            }
+        } catch {
+            log.error("remove many failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        for clip in doomed { deleteFiles(of: clip) }
+        total -= doomed.count
+        let gone = Set(doomed.map(\.id))
+        cache.removeAll { gone.contains($0.id) }
+        refillCache()
+        for clip in doomed { notify(.removed(clip.id)) }
+    }
+
+    public func removeAll() {
+        do {
+            try db.run("DELETE FROM clips")
+        } catch {
+            log.error("remove all failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        // No row points at any file now, so this deletes every image and thumbnail.
+        removeOrphanFiles()
+        total = 0
+        cache = []
+        notify(.reloaded)
+    }
+
+    @discardableResult
+    public func updateText(id: UUID, newText: String) -> Clip? {
+        guard !newText.isEmpty, var clip = try? find(id: id), clip.kind == .text else { return nil }
+        let hash = ContentHash.of(newText)
+        if hash == clip.contentHash { return clip }
+        do {
+            if var other = try find(hash: hash), other.id != id {
+                // Merge: the clip that already holds this text takes the edited clip's slot.
+                other.sortKey = clip.sortKey
+                other.createdAt = max(other.createdAt, clip.createdAt)
+                try db.transaction {
+                    try db.run("DELETE FROM clips WHERE id = ?", [.text(id.uuidString)])
+                    try db.run(
+                        "UPDATE clips SET sort_key = ?, created_at = ? WHERE id = ?",
+                        [.double(other.sortKey), .double(other.createdAt.timeIntervalSinceReferenceDate), .text(other.id.uuidString)]
+                    )
+                }
+                total -= 1
+                cache.removeAll { $0.id == other.id }
+                if let i = cache.firstIndex(where: { $0.id == id }) { cache[i] = other } else { refillCache() }
+                notify(.removed(id))
+                notify(.updated(other.id))
+                return other
+            }
+            clip.plainText = newText
+            clip.rtfData = nil
+            clip.htmlData = nil
+            clip.characterCount = newText.count
+            clip.contentHash = hash
+            try db.run(
+                "UPDATE clips SET plain_text = ?, rtf = NULL, html = NULL, character_count = ?, content_hash = ? WHERE id = ?",
+                [.text(newText), .int(Int64(clip.characterCount)), .text(hash), .text(id.uuidString)]
+            )
+        } catch {
+            log.error("edit failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        if let i = cache.firstIndex(where: { $0.id == id }) { cache[i] = clip }
+        notify(.updated(id))
+        return clip
+    }
+
     // MARK: Order
 
     private static let panelOrder = "sort_key, created_at DESC, id"
@@ -204,13 +374,21 @@ public final class SQLiteClipStore: ClipStore {
 
     // MARK: Retention
 
-    /// Keeps the newest `maxClips`, then drops the oldest images until their files fit `maxImageBytes`.
-    private func enforceRetention() {
+    /// Drops clips last copied before `maxAge` ago and keeps the newest `maxClips`, then drops the
+    /// oldest images until their files fit `maxImageBytes`. Both of the first two rules take the
+    /// oldest clips by date, so one indexed query finds them; the deletes run in one transaction.
+    func enforceRetention(now: Date = Date()) {
         do {
             var doomed: [Clip] = []
             var doomedBytes: Int64 = 0
-            if total > maxClips {
-                let rows = try fetchWithBytes("ORDER BY created_at, id LIMIT ?", [.int(Int64(total - maxClips))])
+            var oldest = max(total - maxClips, 0)
+            if let maxAge {
+                let cutoff = now.addingTimeInterval(-maxAge).timeIntervalSinceReferenceDate
+                let expired = try db.query("SELECT COUNT(*) FROM clips WHERE created_at < ?", [.double(cutoff)]) { $0.int(0) ?? 0 }
+                oldest = max(oldest, expired.first ?? 0)
+            }
+            if oldest > 0 {
+                let rows = try fetchWithBytes("ORDER BY created_at, id LIMIT ?", [.int(Int64(oldest))])
                 doomed = rows.map(\.clip)
                 doomedBytes = rows.reduce(0) { $0 + $1.bytes }
             }
@@ -236,6 +414,20 @@ public final class SQLiteClipStore: ClipStore {
             for clip in doomed { notify(.removed(clip.id)) }
         } catch {
             log.error("retention failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Runs auto-clear about hourly while `maxAge` is set.
+    private func scheduleAgeSweep() {
+        guard maxAge != nil else {
+            ageSweep.stop()
+            return
+        }
+        guard !ageSweep.isRunning else { return }
+        ageSweep.start { [weak self] in
+            guard let self else { return false }
+            self.enforceRetention()
+            return true
         }
     }
 
