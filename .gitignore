@@ -1,0 +1,12 @@
+# Planning material stays on disk, never in history
+context.md
+reports/
+research_notes/
+prototype/
+
+# Build output
+.build/
+.build-*/
+*.app
+dist/
+.DS_Store
