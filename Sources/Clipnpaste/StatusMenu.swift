@@ -1,4 +1,5 @@
 import AppKit
+import ClipnpasteCore
 
 /// The menu bar icon: open the panel, shortcut, launch at login, Accessibility status,
 /// the classic blur switch, Quit.
@@ -19,7 +20,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.panel = panel
         self.shortcuts = shortcuts
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Clipnpaste")
+        item.button?.image = MenuBarGlyph.image()
         accessibilityItem.toolTip = "Open Accessibility in System Settings"
         for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem] { i.target = self }
 
