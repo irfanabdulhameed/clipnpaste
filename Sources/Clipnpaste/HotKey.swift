@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import ClipnpasteCore
 
 /// A global shortcut through Carbon's RegisterEventHotKey: no permission needed, and the
 /// keystroke is swallowed so the app in front never sees it.
@@ -52,5 +53,60 @@ final class HotKey {
             MainActor.assumeIsolated { HotKey.actions[id]?() }
             return noErr
         }, 1, &spec, nil, nil)
+    }
+}
+
+/// Keeps one global shortcut registered and moves it when the shortcut changes.
+/// With `live` false (checks and demos) nothing is registered with the system.
+@MainActor
+final class HotKeyManager {
+    private(set) var shortcut: Shortcut
+    private var hotKey: HotKey?
+    private let live: Bool
+    private let simulateConflict: Bool
+    private let action: () -> Void
+
+    init(shortcut: Shortcut, live: Bool, simulateConflict: Bool = false, action: @escaping () -> Void) {
+        self.shortcut = shortcut
+        self.live = live
+        self.simulateConflict = simulateConflict
+        self.action = action
+    }
+
+    func start() { resume() }
+
+    /// Lets the shortcut reach the recorder instead of opening the panel.
+    func pause() {
+        hotKey?.unregister()
+        hotKey = nil
+    }
+
+    func resume() {
+        guard live, hotKey == nil else { return }
+        hotKey = HotKey(keyCode: shortcut.keyCode, modifiers: Self.carbon(shortcut.modifiers), action: action)
+    }
+
+    /// Registers the new combination at once. If another app holds it, the old one stays and this returns false.
+    func change(to new: Shortcut) -> Bool {
+        pause()
+        if simulateConflict { resume(); return false }
+        if live {
+            guard let fresh = HotKey(keyCode: new.keyCode, modifiers: Self.carbon(new.modifiers), action: action) else {
+                resume()
+                return false
+            }
+            hotKey = fresh
+        }
+        shortcut = new
+        return true
+    }
+
+    static func carbon(_ m: Shortcut.Modifiers) -> UInt32 {
+        var mask = 0
+        if m.contains(.command) { mask |= cmdKey }
+        if m.contains(.control) { mask |= controlKey }
+        if m.contains(.option) { mask |= optionKey }
+        if m.contains(.shift) { mask |= shiftKey }
+        return UInt32(mask)
     }
 }

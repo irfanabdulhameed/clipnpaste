@@ -6,7 +6,7 @@ import ClipnpasteCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environment: AppEnvironment?
     private var panel: PanelController?
-    private var hotKey: HotKey?
+    private var shortcuts: ShortcutController?
     private var statusMenu: StatusMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,14 +25,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment = env
         let panel = PanelController(store: env.store, watcher: env.watcher)
         self.panel = panel
-        // A debug run (any check flag) takes no global shortcut and adds no menu bar icon, so an
+        // The chosen shortcut (⌃⌘V by default) toggles the panel. A debug run (any check flag) gets no
+        // global shortcut (the manager is not live in sandbox mode) and no menu bar icon, so an
         // installed copy that is running keeps ⌃⌘V and nothing it shows changes.
+        let shortcuts = ShortcutController(useClassicBlur: { [weak panel] in panel?.useClassicBlur ?? false }) { [weak panel] in
+            panel?.toggle()
+        }
+        self.shortcuts = shortcuts
+        shortcuts.start()
         if !DebugFlags.usesDemoStore {
-            // ⌃⌘V toggles the panel.
-            hotKey = HotKey(keyCode: UInt32(Paster.vKeyCode()), modifiers: UInt32(cmdKey | controlKey)) { [weak panel] in
-                panel?.toggle()
-            }
-            statusMenu = StatusMenu(panel: panel)
+            statusMenu = StatusMenu(panel: panel, shortcuts: shortcuts)
         } else {
             debugLog("debug run: in-memory store, no watcher, no hotkey, no menu bar icon")
         }
