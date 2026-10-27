@@ -89,6 +89,8 @@ final class PanelModel {
     var marks: [UUID: CopyMark] = [:]
     var missing: Set<UUID> = []
     var needsAccessibility = false
+    /// Pasteboard privacy is set to ask or deny: the second banner.
+    var needsPasteboardAccess = false
     var theme = Theme()
     /// Time labels are relative to the moment the panel opened.
     var now = Date()

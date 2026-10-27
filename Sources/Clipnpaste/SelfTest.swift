@@ -328,6 +328,9 @@ extension PanelController {
         pasteInterceptor = nil
         glass.h.probe = nil
 
+        // Panel-level motion: rise, interruption, exit after a paste, history, toast (Diagnostics.swift).
+        await runPanelMotionChecks { check($0, $1, $2) }
+
         debugLog("self-test done: \(r.passed) passed, \(r.failed) failed")
         showToast(on: screen)
         debugLog("toast shown at \(toast.frame) on visible \(screen?.visibleFrame ?? .zero)")
@@ -370,6 +373,8 @@ extension PanelController {
             stepRows(1); await wait(400); stepRows(1)
         case "history":
             toggleHistory()
+        case "measure":
+            await runMeasureScene()
         case "reopen":
             for _ in 0..<3 {
                 close(); await wait(300)

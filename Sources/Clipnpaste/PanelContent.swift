@@ -16,6 +16,13 @@ final class PanelContentView: NSView {
     let scrollView = NSScrollView()
     let documentView = CardsDocumentView()
     let emptyHost: NSHostingView<EmptyState>
+    /// The first-use message is born blurred with the cards, and blurs out with them.
+    private(set) lazy var emptyFx = Fx { [unowned self] fx in
+        LayerLook.opacity(self.emptyHost.layer, fx.op.v)
+        LayerLook.scale(self.emptyHost, fx.scale.v)
+        LayerLook.blur(self.emptyHost.layer, fx.blur.v, filter: &self.emptyBlur)
+    }
+    private var emptyBlur: CIFilter?
 
     init(model: PanelModel) {
         topBar = TopBarView(model: model)
@@ -36,6 +43,8 @@ final class PanelContentView: NSView {
         scrollView.wantsLayer = true
         scrollView.documentView = documentView
         emptyHost.sizingOptions = []
+        emptyHost.wantsLayer = true
+        emptyHost.layerUsesCoreImageFilters = true
         cardsArea.addSubview(scrollView)
         cardsArea.addSubview(emptyHost)
         addSubview(cardsArea)
@@ -524,6 +533,8 @@ struct StatusSlot: View {
                 .lineLimit(1)
             } else if model.needsAccessibility {
                 AccessibilityBanner(theme: theme) { model.onOpenSettings?() }
+            } else if model.needsPasteboardAccess {
+                PasteboardBanner(theme: theme) { model.onOpenSettings?() }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

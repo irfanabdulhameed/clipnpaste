@@ -71,7 +71,11 @@ extension PanelController {
         let scale = screen?.backingScaleFactor ?? 2
         let h = max(pixelSnap(glass.h.v, scale: scale), 1)
         let f = NSRect(x: inset, y: inset, width: CGFloat(g.width), height: h)
-        if surface.frame != f { surface.frame = f }
+        if surface.frame != f {
+            surface.frame = f
+            // A new frame must not drop the rise's transform.
+            renderRise(sample: false)
+        }
         let fade = min(max(glass.fade.v, 0), 1)
         if let layer = content.cardsArea.layer {
             layer.opacity = Float(fade)
@@ -133,7 +137,12 @@ extension PanelController {
             if model.focus == .history { model.focus = .card }
         }
         bar.history.focused = model.focus == .history
-        content.emptyHost.isHidden = !model.clips.isEmpty
+        let empty = model.clips.isEmpty
+        if content.emptyHost.isHidden == empty {
+            content.emptyHost.isHidden = !empty
+            // The last clip removed while open: the first-use message is born blurred.
+            if empty, phase == .open { content.emptyFx.born(blur: 20, scale: 1.06) }
+        }
     }
 
     // MARK: Rows
@@ -302,6 +311,7 @@ extension PanelController {
     /// their place under "Today", and the rest are born blurred 20 ms apart per row.
     func enterHistory() {
         guard historyEnabled, model.mode != .history else { return }
+        Diagnostics.shared.begin(.history)
         let before = viewAt(height: glass.h.v)
         board.rebaseScroll()
         history = HistoryState(token: history.token + 1)
@@ -324,6 +334,7 @@ extension PanelController {
     /// Back to the row or grid: the rows below blur out on `leave`, the height returns on `arrive`.
     func leaveHistory() {
         guard model.mode == .history else { return }
+        Diagnostics.shared.begin(.history)
         let before = viewAt(height: glass.h.v)
         board.rebaseScroll()
         history = HistoryState(token: history.token + 1)
