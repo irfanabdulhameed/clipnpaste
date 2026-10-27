@@ -26,10 +26,32 @@ import Foundation
         #expect(read(pb) == .capture(.text("hi", rtf: rtf, html: html), source: notes))
     }
 
-    @Test func imageDataBeatsText() {
+    @Test func textBeatsBundledPicture() {
         let pb = FakePasteboard()
-        pb.copy(strings: [PasteboardTypes.plainText: "alt text"], data: [PasteboardTypes.tiff: png, PasteboardTypes.html: Data("<img>".utf8)])
-        #expect(read(pb) == .capture(.imageData(png, type: PasteboardTypes.tiff), source: notes))
+        pb.copy(strings: [PasteboardTypes.plainText: "alt text"], data: [PasteboardTypes.tiff: png])
+        #expect(read(pb) == .capture(.text("alt text", rtf: nil, html: nil), source: notes))
+    }
+
+    @Test func spreadsheetCopyIsText() {
+        let pb = FakePasteboard()
+        let rtf = Data("{\\rtf1 a}".utf8), html = Data("<table></table>".utf8)
+        pb.copy(strings: [PasteboardTypes.plainText: "Q1\t120\nQ2\t150"],
+                data: [PasteboardTypes.rtf: rtf, PasteboardTypes.html: html, PasteboardTypes.png: png])
+        #expect(read(pb) == .capture(.text("Q1\t120\nQ2\t150", rtf: rtf, html: html), source: notes))
+    }
+
+    @Test func browserCopyImageIsImage() {
+        let pb = FakePasteboard()
+        pb.copy(strings: [PasteboardTypes.plainText: "https://example.com/cat.png"], data: [PasteboardTypes.png: png])
+        #expect(read(pb) == .capture(.imageData(png, type: PasteboardTypes.png), source: notes))
+        pb.copy(strings: [PasteboardTypes.plainText: "/Users/me/cat.png"], data: [PasteboardTypes.png: png])
+        #expect(read(pb) == .capture(.imageData(png, type: PasteboardTypes.png), source: notes))
+    }
+
+    @Test func imageWithBlankTextIsImage() {
+        let pb = FakePasteboard()
+        pb.copy(strings: [PasteboardTypes.plainText: " \n"], data: [PasteboardTypes.png: png])
+        #expect(read(pb) == .capture(.imageData(png, type: PasteboardTypes.png), source: notes))
     }
 
     @Test func imageTypePriority() {
@@ -45,7 +67,7 @@ import Foundation
         }
     }
 
-    @Test func finderImageFileBeatsItsIcon() throws {
+    @Test func finderImageFileIsImage() throws {
         let dir = TempDir()
         defer { dir.remove() }
         let file = dir.url.appending(path: "photo.png")

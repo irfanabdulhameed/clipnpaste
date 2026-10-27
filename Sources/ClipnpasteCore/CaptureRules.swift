@@ -79,7 +79,7 @@ public enum CaptureResult: Sendable, Equatable {
 }
 
 /// Decides what a copy is and whether to keep it, in the plan's strict order:
-/// skip markers, ignored apps, image file, other file, image data, rich text, plain text.
+/// skip markers, ignored apps, image file, other file, plain text (with its rich versions), image data.
 public struct CaptureRules: Sendable {
     /// Password managers whose copies are never kept, matched without case.
     public static let passwordManagers: Set<String> = [
@@ -132,13 +132,18 @@ public struct CaptureRules: Sendable {
             return .capture(.imageFile(url), source: source)
         }
 
-        for type in PasteboardTypes.images where types.contains(type) {
+        // Plain text wins over a bundled picture (spreadsheets and slides put one beside the text),
+        // unless the text is only the address of the image (browser "Copy Image").
+        let plain = pb.string(forType: PasteboardTypes.plainText)
+        let hasText = plain.map { !$0.allSatisfy(\.isWhitespace) } ?? false
+        let textIsImageAddress = plain.map(Self.isSingleAddress) ?? false
+        for type in PasteboardTypes.images where types.contains(type) && (!hasText || textIsImageAddress) {
             guard let data = pb.data(forType: type), !data.isEmpty else { continue }
             if data.count > Self.maxImageBytes { return .skip(.tooLarge) }
             return .capture(.imageData(data, type: type), source: source)
         }
 
-        guard let text = pb.string(forType: PasteboardTypes.plainText) else { return .skip(.unsupported) }
+        guard let text = plain else { return .skip(.unsupported) }
         if text.allSatisfy(\.isWhitespace) { return .skip(.blank) }
         if text.utf8.count > Self.maxTextBytes { return .skip(.tooLarge) }
         let rich = { (type: String) -> Data? in
@@ -146,6 +151,15 @@ public struct CaptureRules: Sendable {
             return data
         }
         return .capture(.text(text, rtf: rich(PasteboardTypes.rtf), html: rich(PasteboardTypes.html)), source: source)
+    }
+
+    /// One URL or file path and nothing else.
+    static func isSingleAddress(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty || t.contains(where: \.isWhitespace) { return false }
+        if t.hasPrefix("/") || t.hasPrefix("~/") { return true }
+        guard let scheme = URL(string: t)?.scheme?.lowercased() else { return false }
+        return ["http", "https", "file"].contains(scheme)
     }
 
     /// The source marker when present; otherwise the frontmost app, except for a
