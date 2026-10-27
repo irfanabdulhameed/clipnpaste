@@ -14,6 +14,10 @@ enum RecorderPhase { case rest, recording, saved, invalid, conflict }
 final class ShortcutField: NSView {
     var label = "" { didSet { setAccessibilityValue(label); needsDisplay = true } }
     var phase: RecorderPhase = .rest { didSet { needsDisplay = true } }
+    /// The Settings row size: 13 pt type in a 24 pt field, the height of the buttons beside it.
+    /// It records only when clicked or reached with Tab, never because the window gave it focus
+    /// on its own, and stops when the window loses the keyboard.
+    var compact = false { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
     private(set) var isRecording = false
     private var hovering = false
     private var tracking: NSTrackingArea?
@@ -33,9 +37,10 @@ final class ShortcutField: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    override var acceptsFirstResponder: Bool { true }
+    /// In a Settings row it takes focus only from a click or Tab, never as the window's first pick.
+    override var acceptsFirstResponder: Bool { !compact || Self.userMovedFocus }
     override var isFlipped: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 52) }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: compact ? 24 : 52) }
 
     func startRecording() {
         guard !isRecording else { return }
@@ -53,8 +58,37 @@ final class ShortcutField: NSView {
     }
 
     override func becomeFirstResponder() -> Bool {
-        startRecording()
+        if !compact || Self.userMovedFocus { startRecording() } else { needsDisplay = true }
         return true
+    }
+
+    /// Leaving the window (another Settings section) ends a recording, so the global shortcut
+    /// is never left paused.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { stopRecording() }
+    }
+
+    /// The focus ring shows only while the window is key, as every control's does.
+    /// In Settings, the window losing the keyboard also ends a recording.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self)
+        guard let window else { return }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: name, object: window)
+        }
+    }
+
+    @objc private func keyChanged() {
+        if compact, window?.isKeyWindow == false { stopRecording() }
+        needsDisplay = true
+    }
+
+    /// A click, or Tab / Shift-Tab, is what put the focus here.
+    private static var userMovedFocus: Bool {
+        guard let e = NSApp.currentEvent else { return false }
+        return e.type == .leftMouseDown || (e.type == .keyDown && e.keyCode == 48)
     }
 
     override func resignFirstResponder() -> Bool {
@@ -114,9 +148,9 @@ final class ShortcutField: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let theme = Theme(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
-        let focused = window?.firstResponder === self
+        let focused = window?.firstResponder === self && window?.isKeyWindow == true
         let rect = bounds
-        let radius: CGFloat = 14
+        let radius: CGFloat = compact ? 6 : 14
         let fill: NSColor = (hovering && !isRecording) ? Palette.buttonHover : Palette.button
         fill.setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
@@ -129,6 +163,8 @@ final class ShortcutField: NSView {
         default:
             if focused { ring = Palette.accentRing; width = 1.5 }
         }
+        // In a Settings row, Increase Contrast gives the field an edge at rest.
+        if compact, ring == nil, theme.increaseContrast { ring = .separatorColor; width = 1 }
         if let ring {
             let inset = width / 2
             let path = NSBezierPath(roundedRect: rect.insetBy(dx: inset, dy: inset), xRadius: radius - inset, yRadius: radius - inset)
@@ -139,7 +175,9 @@ final class ShortcutField: NSView {
 
         let recording = isRecording && phase == .recording
         let text = recording ? "Type a shortcut…" : label
-        let font = recording ? NSFont.systemFont(ofSize: 15, weight: .medium) : NSFont.systemFont(ofSize: 22, weight: .semibold)
+        let font = compact
+            ? NSFont.systemFont(ofSize: recording ? 12 : 13, weight: .medium)
+            : (recording ? NSFont.systemFont(ofSize: 15, weight: .medium) : NSFont.systemFont(ofSize: 22, weight: .semibold))
         let color = recording ? theme.nsLabel2 : Palette.label
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         let size = (text as NSString).size(withAttributes: attrs)

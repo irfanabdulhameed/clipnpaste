@@ -22,8 +22,13 @@ enum DebugFlags {
     static let demoStates = args.contains("--demo-states")
     /// Starts with no clips, to see the first-use state.
     static let empty = args.contains("--empty")
+    /// `--show-settings SECTION` opens the Settings window on overview, clips, general, panel,
+    /// motion, privacy or about (with the demo store and sandboxed settings).
+    static let showSettings: String? = value(after: "--show-settings")
     /// Any flag that must not touch the real history or clipboard.
-    static var usesDemoStore: Bool { selfTest || showPanel || demoExtra || demoStates || empty || scene != nil }
+    static var usesDemoStore: Bool {
+        selfTest || showPanel || demoExtra || demoStates || empty || scene != nil || showSettings != nil
+    }
     static let reduceTransparency = args.contains("--reduce-transparency")
     static let increaseContrast = args.contains("--increase-contrast")
     static let reduceMotion = args.contains("--reduce-motion")
