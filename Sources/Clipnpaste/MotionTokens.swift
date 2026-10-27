@@ -27,7 +27,12 @@ enum Motion {
     /// The press dip on small controls, held while pressed.
     static let dipControl = 0.92
     static let dipPill = 0.94
+    /// Cards dip less: 1 → 0.97.
+    static let dipCard = 0.97
     static let dipMs = 70.0
+    /// A selection change this soon after the last one is a held arrow key: the ring glides on
+    /// and the card doesn't pop.
+    static let repeatMs = 120.0
 
     /// Under Reduce Motion: no travel, no scale, no tilt; fades and cuts instead.
     @MainActor static var reduce = false
@@ -111,7 +116,7 @@ final class MotionClock: NSObject {
     @objc private func tick(_ l: CADisplayLink) {
         inFrame = true
         let now = l.targetTimestamp
-        let dt = min(max(now - lastTarget, 0), 0.1)
+        let dt = min(max(now - lastTarget, 0), 0.1) / DebugFlags.slowMotion
         lastTarget = now
         for h in Array(hooks.values) { h(dt) }
         for a in Array(active.values) where !a.step(dt) {

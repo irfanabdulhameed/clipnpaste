@@ -97,6 +97,9 @@ final class PanelModel {
     var totalCount = 0
 
     @ObservationIgnored var onOpenSettings: (() -> Void)?
+    /// The board's card motion: called with the old and new (card, button) when hover or press changes.
+    @ObservationIgnored var onHoverChange: ((_ old: (UUID?, CardButton?), _ new: (UUID?, CardButton?)) -> Void)?
+    @ObservationIgnored var onPressChange: ((_ old: (UUID?, CardButton?), _ new: (UUID?, CardButton?)) -> Void)?
 
     var selectedIndex: Int? { selectedID.flatMap { id in clips.firstIndex { $0.id == id } } }
 
@@ -115,13 +118,17 @@ final class PanelModel {
     }
 
     func setHover(_ card: UUID?, _ button: CardButton?) {
+        let old = (hoveredCard, hoveredButton)
         if hoveredCard != card { hoveredCard = card }
         if hoveredButton != button { hoveredButton = button }
+        if old.0 != card || old.1 != button { onHoverChange?(old, (card, button)) }
     }
 
     func setPressed(_ card: UUID?, _ button: CardButton?) {
+        let old = (pressedCard, pressedButton)
         if pressedCard != card { pressedCard = card }
         if pressedButton != button { pressedButton = button }
+        if old.0 != card || old.1 != button { onPressChange?(old, (card, button)) }
     }
 
     func markMissing(_ id: UUID) {
