@@ -241,6 +241,12 @@ extension PanelController {
         let startScreen = panel.convertPoint(toScreen: start)
         let grab = CGPoint(x: startScreen.x - screenRect.minX, y: screenRect.maxY - startScreen.y)
         let preview = DragPreview(clip: clip, model: model, frame: screenRect, grab: grab)
+        // It lifts from the card's pressed size, so the lift never jumps.
+        let pressed = board.scale(of: clip.id)
+        if abs(pressed - 1) > 1e-4 {
+            preview.sc.set(pressed)
+            preview.render()
+        }
         let d = CardDrag(clip: clip, from: from, reorderable: model.mode != .history, grab: grab,
                          pointer: startScreen, preview: preview)
         d.velocity.add(time: ProcessInfo.processInfo.systemUptime, x: startScreen.x, y: startScreen.y)

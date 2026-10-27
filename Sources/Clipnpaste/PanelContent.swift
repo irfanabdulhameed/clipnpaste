@@ -94,6 +94,8 @@ final class CardCell: NSView {
     static let margin: CGFloat = 24
 
     private let host: NSHostingView<CardCellContent>
+    /// The motion inside the card's content (button pop and dip, thumbnail blur-in).
+    let look = CardLook()
     private(set) var clipID: UUID?
     private let model: PanelModel
     private var blurFilter: CIFilter?
@@ -101,7 +103,7 @@ final class CardCell: NSView {
 
     init(model: PanelModel) {
         self.model = model
-        host = NSHostingView(rootView: CardCellContent(clip: nil, model: model))
+        host = NSHostingView(rootView: CardCellContent(clip: nil, model: model, look: look))
         host.sizingOptions = []
         super.init(frame: .zero)
         wantsLayer = true
@@ -118,12 +120,12 @@ final class CardCell: NSView {
     func show(_ clip: Clip) {
         guard clipID != clip.id else { return }
         clipID = clip.id
-        host.rootView = CardCellContent(clip: clip, model: model)
+        host.rootView = CardCellContent(clip: clip, model: model, look: look)
     }
 
     func clear() {
         clipID = nil
-        host.rootView = CardCellContent(clip: nil, model: model)
+        host.rootView = CardCellContent(clip: nil, model: model, look: look)
     }
 
     /// Puts the card's top-left at (`x`, `y`) in the scroll content.
@@ -164,11 +166,12 @@ final class CardCell: NSView {
 struct CardCellContent: View {
     let clip: Clip?
     let model: PanelModel
+    let look: CardLook
 
     var body: some View {
         if let clip {
             CardView(clip: clip, state: model.state(for: clip.id), geometry: model.geometry, theme: model.theme,
-                     now: model.now, onMissing: { model.markMissing($0) })
+                     now: model.now, onMissing: { model.markMissing($0) }, look: look)
                 .padding(CardCell.margin)
         }
     }

@@ -46,6 +46,8 @@ final class PanelController {
     let dragSource = DragSource()
     /// `--self-test`: records a paste instead of making one, so the clipboard is never touched.
     var pasteInterceptor: ((UUID) -> Void)?
+    /// `--self-test`: records a copy instead of writing the clipboard.
+    var copyInterceptor: ((UUID) -> Void)?
 
     private(set) var isOpen = false
 
@@ -475,7 +477,7 @@ final class PanelController {
                 b == .copy ? copy(p.id) : remove(p.id)
             }
         } else if !p.moved {
-            select(p.id)
+            select(p.id, pop: .none)
             paste(p.id)
         }
         refreshHover()
@@ -593,8 +595,10 @@ final class PanelController {
         select(model.clips[i].id)
     }
 
-    func select(_ id: UUID) {
-        if model.selectedID != id { model.selectedID = id }
+    func select(_ id: UUID, pop: Board.Pop = .normal) {
+        let changed = model.selectedID != id
+        if changed { model.selectedID = id }
+        if changed || pop == .force { board.selected(id, pop: pop) }
         if model.focus != .card { model.focus = .card }
         scrollToSelection()
     }
@@ -735,12 +739,16 @@ final class PanelController {
     /// Copy keeps the panel open; the button shows a checkmark for 1.5 s.
     private func copy(_ id: UUID) {
         guard let clip = clip(id), isUsable(clip) else { return }
-        if let count = Paster.write(clip) {
+        if let intercept = copyInterceptor {
+            intercept(id)
+            model.marks[id] = .done
+        } else if let count = Paster.write(clip) {
             watcher.markOwnWrite(changeCount: count)
             model.marks[id] = .done
         } else {
             model.marks[id] = .failed
         }
+        board.copyConfirmed(id)
         let token = UUID()
         markTokens[id] = token
         Task { [weak self] in
@@ -760,7 +768,7 @@ final class PanelController {
         if stale { reload() }
         model.marks[id] = nil
         model.missing.remove(id)
-        if wasSelected, !model.clips.isEmpty { selectIndex(min(i, model.clips.count - 1)) }
+        if wasSelected, !model.clips.isEmpty { select(model.clips[min(i, model.clips.count - 1)].id, pop: .force) }
         refreshHover()
     }
 
