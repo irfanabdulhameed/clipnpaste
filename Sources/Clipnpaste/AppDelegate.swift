@@ -6,7 +6,7 @@ import ClipnpasteCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environment: AppEnvironment?
     private var panel: PanelController?
-    private var hotKey: HotKey?
+    private var shortcuts: ShortcutController?
     private var statusMenu: StatusMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,11 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment = env
         let panel = PanelController(store: env.store, watcher: env.watcher)
         self.panel = panel
-        // ⌃⌘V toggles the panel.
-        hotKey = HotKey(keyCode: UInt32(Paster.vKeyCode()), modifiers: UInt32(cmdKey | controlKey)) { [weak panel] in
+        // The chosen shortcut (⌃⌘V by default) toggles the panel.
+        let shortcuts = ShortcutController(useClassicBlur: { [weak panel] in panel?.useClassicBlur ?? false }) { [weak panel] in
             panel?.toggle()
         }
-        statusMenu = StatusMenu(panel: panel)
+        self.shortcuts = shortcuts
+        shortcuts.start()
+        statusMenu = StatusMenu(panel: panel, shortcuts: shortcuts)
         if DebugFlags.showPanel || DebugFlags.selfTest {
             Task {
                 panel.open()
