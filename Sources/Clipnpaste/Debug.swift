@@ -7,7 +7,15 @@ enum DebugFlags {
     /// Opens the panel at launch and logs its geometry to stderr.
     static let showPanel = args.contains("--show-panel")
     static let selfTest = args.contains("--self-test")
-    static let logGeometry = showPanel || selfTest || args.contains("--log-geometry")
+    /// `--scene NAME` opens the panel in one state for a screenshot: pill-hover, pill-press,
+    /// pill-limit, grid3, history, drag, strip.
+    static let scene: String? = value(after: "--scene")
+    static let traceEvents = args.contains("--trace-events")
+    /// The self-test and scenes drive the panel with synthetic events.
+    static var drivesPanel: Bool { selfTest || scene != nil }
+    static let logGeometry = showPanel || selfTest || scene != nil || args.contains("--log-geometry")
+    /// History pages in this many clips at a time (200 normally; 40 in the self-test so paging shows).
+    static let historyPage: Int? = value(after: "--history-page").flatMap { Int($0) } ?? (selfTest ? 40 : nil)
     /// Adds image, long-text and missing-file clips to the in-memory demo store.
     static let demoExtra = args.contains("--demo-extra")
     /// Shows hover, pressed, copy-confirmed and Tab focus together when the panel opens.
@@ -15,12 +23,16 @@ enum DebugFlags {
     /// Starts with no clips, to see the first-use state.
     static let empty = args.contains("--empty")
     /// Any flag that must not touch the real history or clipboard.
-    static var usesDemoStore: Bool { selfTest || showPanel || demoExtra || demoStates || empty }
+    static var usesDemoStore: Bool { selfTest || showPanel || demoExtra || demoStates || empty || scene != nil }
     static let reduceTransparency = args.contains("--reduce-transparency")
     static let increaseContrast = args.contains("--increase-contrast")
     static let reduceMotion = args.contains("--reduce-motion")
     /// `--appearance light` or `--appearance dark` overrides the system appearance.
-    static let appearance: String? = args.firstIndex(of: "--appearance").flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil }
+    static let appearance: String? = value(after: "--appearance")
+
+    private static func value(after flag: String) -> String? {
+        args.firstIndex(of: flag).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil }
+    }
 }
 
 private let logger = Logger(subsystem: "com.irfanabdulhameed.clipnpaste", category: "app")

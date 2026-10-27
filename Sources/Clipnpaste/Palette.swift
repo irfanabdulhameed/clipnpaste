@@ -37,6 +37,10 @@ enum Palette {
     static let buttonPress = ink(0.24, 0.24)
     static let pill = ink(0.35, 0.35)
     static let pillContrast = ink(0.60, 0.60)
+    static let pillHover = ink(0.60, 0.60)
+    static let pillPress = ink(0.85, 0.85)
+    /// The drag preview's card is opaque, so it reads over any app.
+    static let previewFill = pair(NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1), NSColor(srgbRed: 0x26 / 255, green: 0x26 / 255, blue: 0x28 / 255, alpha: 1))
     static let accentRing = NSColor(name: nil) { appearance in
         let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.5 : 0.45)
@@ -69,6 +73,7 @@ struct Theme {
     var buttonHover: Color { Color(nsColor: Palette.buttonHover) }
     var buttonPress: Color { Color(nsColor: Palette.buttonPress) }
     var pill: Color { Color(nsColor: increaseContrast ? Palette.pillContrast : Palette.pill) }
+    var previewFill: Color { Color(nsColor: Palette.previewFill) }
     var amber: Color { Color(nsColor: Palette.amber) }
     var checkA: Color { Color(nsColor: Palette.checkA) }
     var checkB: Color { Color(nsColor: Palette.checkB) }

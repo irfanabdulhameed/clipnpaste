@@ -7,6 +7,14 @@ final class ClipPanel: NSPanel {
     /// Sees every event first. Returns the event to deliver (possibly changed), or nil when handled.
     var router: ((NSEvent) -> NSEvent?)?
     var onResignKey: (() -> Void)?
+    /// A self-test or scene run: real mouse events never reach the window (its checks send their
+    /// own events straight to it), so the person using the Mac can't disturb a run, or be disturbed by it.
+    var testDriven = false
+
+    override var ignoresMouseEvents: Bool {
+        get { super.ignoresMouseEvents }
+        set { super.ignoresMouseEvents = testDriven || newValue }
+    }
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)

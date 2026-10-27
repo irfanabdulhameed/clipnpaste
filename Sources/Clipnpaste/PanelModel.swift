@@ -24,6 +24,8 @@ struct PanelGeometry: Equatable {
     let sidePadding: Int
     /// Text lines a card shows.
     let lines: Int
+    /// Card positions and the row maths for the pill, grid and history.
+    let grid: PanelGrid
 
     init(visibleWidth: Int, visibleHeight: Int, screenHeight: Int? = nil) {
         let l = CardLayout(visibleWidth: visibleWidth, visibleHeight: visibleHeight, screenHeight: screenHeight)
@@ -32,6 +34,7 @@ struct PanelGeometry: Equatable {
         width = visibleWidth - 2 * Self.inset
         sidePadding = (width - l.count * l.cardWidth - (l.count - 1) * CardLayout.gap) / 2
         lines = max(1, (l.cardHeight - Self.header - Self.footer) / Self.lineHeight)
+        grid = PanelGrid(layout: l, panelWidth: width, availableHeight: visibleHeight - 2 * Self.inset)
     }
 
     var height: Int { layout.panelHeight }
@@ -40,7 +43,7 @@ struct PanelGeometry: Equatable {
     var cardTop: Int { CardLayout.topBar }
     var pitch: Int { layout.cardWidth + CardLayout.gap }
     /// More than one row fits, so the resize pill has somewhere to go.
-    var canGrow: Bool { layout.rows(forHeight: visibleHeight - 2 * Self.inset) > 1 }
+    var canGrow: Bool { grid.maxRows > 1 }
 
     /// Left edge of card `index` in the row's content.
     func cardX(_ index: Int) -> Int { sidePadding + index * pitch }
@@ -53,7 +56,7 @@ struct PanelGeometry: Equatable {
 }
 
 enum CardButton: Sendable { case copy, remove }
-enum FocusZone: Sendable { case card, copy, remove }
+enum FocusZone: Sendable { case card, copy, remove, history }
 enum CopyMark: Sendable { case done, failed }
 
 /// What one card shows besides its clip.
@@ -69,6 +72,9 @@ struct CardState: Equatable {
     var missing = false
     var buttonsShown: Bool { selected || hovered }
 }
+
+/// Row (one row), grid (the pill pulled up) or history (all clips by day).
+enum PanelMode: Sendable, Equatable { case row, grid, history }
 
 @MainActor @Observable
 final class PanelModel {
@@ -86,11 +92,10 @@ final class PanelModel {
     var theme = Theme()
     /// Time labels are relative to the moment the panel opened.
     var now = Date()
-    var scrollPosition = ScrollPosition(x: 0)
+    var mode: PanelMode = .row
+    /// All clips in the store, for the history title.
+    var totalCount = 0
 
-    /// The row's current scroll offset, kept for hit testing.
-    @ObservationIgnored var scrollX: CGFloat = 0
-    @ObservationIgnored var onScroll: (() -> Void)?
     @ObservationIgnored var onOpenSettings: (() -> Void)?
 
     var selectedIndex: Int? { selectedID.flatMap { id in clips.firstIndex { $0.id == id } } }
@@ -117,11 +122,6 @@ final class PanelModel {
     func setPressed(_ card: UUID?, _ button: CardButton?) {
         if pressedCard != card { pressedCard = card }
         if pressedButton != button { pressedButton = button }
-    }
-
-    func scrolled(to x: CGFloat) {
-        scrollX = x
-        onScroll?()
     }
 
     func markMissing(_ id: UUID) {

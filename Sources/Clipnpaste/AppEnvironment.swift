@@ -70,6 +70,20 @@ enum DemoExtras {
             c.createdAt = now.addingTimeInterval(-Double(i) * 25 - 10)
             store.insertOrBump(c)
         }
+        // A few from earlier days, at the back of the row, so history shows its day headers.
+        let older: [(String, (String, String), Double)] = [
+            ("Invoice 2026-118 sent to Arjun, due on the 5th.", ("com.apple.mail", "Mail"), 1),
+            ("brew upgrade --cask", ("com.apple.Terminal", "Terminal"), 1.2),
+            ("Courier pickup between 10 and 12, gate 3.", ("com.apple.Notes", "Notes"), 1.4),
+            ("https://developer.apple.com/documentation/appkit/nsdraggingsession", ("com.apple.Safari", "Safari"), 3),
+            ("Dusk shoot: 17:40 at the lake, bring the long lens.", ("com.apple.MobileSMS", "Messages"), 3.3),
+        ]
+        for (s, app, days) in older {
+            var c = text(s, app: app)
+            c.createdAt = now.addingTimeInterval(-days * 86_400)
+            let stored = store.insertOrBump(c)
+            store.move(id: stored.id, toIndex: store.count - 1)
+        }
     }
 
     static func cleanUp() {

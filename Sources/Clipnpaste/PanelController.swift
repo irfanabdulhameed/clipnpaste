@@ -4,45 +4,65 @@ import SwiftUI
 import ClipnpasteCore
 
 /// Owns the panel: built once at launch, then only ordered in and out. Routes every key and
-/// click itself (SwiftUI only draws), and runs the paste path.
+/// click itself (the views only draw), and runs the paste path.
 @MainActor
 final class PanelController {
-    private static let clipLimit = 200
+    static let clipLimit = 200
     private static let classicBlurKey = "useClassicBlur"
     private static let toastText = "Copied. Press ⌘V to paste."
+    /// Older clips page into history this many at a time.
+    static var historyPage: Int { DebugFlags.historyPage ?? 200 }
 
-    private let store: any ClipStore
-    private let watcher: any ClipboardWatcher
-    private let panel = ClipPanel()
-    private let root = PanelRootView()
-    private let model: PanelModel
-    private let surface: GlassSurface
-    private let toast = Toast()
+    let store: any ClipStore
+    let watcher: any ClipboardWatcher
+    let panel = ClipPanel()
+    let root = PanelRootView()
+    let model: PanelModel
+    let surface: GlassSurface
+    let content: PanelContentView
+    let board: Board
+    let toast = Toast()
     private var storeToken: UUID?
     private var clickMonitor: Any?
+    private var moveMonitor: Any?
     private var observers: [NSObjectProtocol] = []
-    private var stale = true
-    private var screen: NSScreen?
+    var stale = true
+    var screen: NSScreen?
     /// The app that was in front when the panel opened; the paste goes there.
     private var previousApp: NSRunningApplication?
-    private var press: Press?
+    var press: Press?
     private var markTokens: [UUID: UUID] = [:]
-    private weak var scrollView: NSScrollView?
+
+    // Height, mode and gestures (see PanelController+Height.swift and CardDrag.swift).
+    var rows = 1
+    var strip: Strip = .full
+    private(set) lazy var glass = GlassMotion(controller: self)
+    var pill: PillDrag?
+    var pillHovered = false
+    /// The History button is held; true while the pointer is still on it.
+    var historyPress: Bool?
+    var history = HistoryState()
+    var drag: CardDrag?
+    let dragSource = DragSource()
+    /// `--self-test`: records a paste instead of making one, so the clipboard is never touched.
+    var pasteInterceptor: ((UUID) -> Void)?
 
     private(set) var isOpen = false
 
-    private struct Press {
+    struct Press {
         let id: UUID
         let button: CardButton?
         let start: NSPoint
         var moved = false
     }
 
-    private enum Hit {
-        case outside, panel
-        case card(Int)
-        case button(Int, CardButton)
+    enum Hit {
+        case outside, panel, pill, history
+        case card(UUID)
+        case button(UUID, CardButton)
     }
+
+    enum Strip { case full, strip }
 
     var useClassicBlur: Bool {
         get { UserDefaults.standard.bool(forKey: Self.classicBlurKey) }
@@ -52,7 +72,7 @@ final class PanelController {
         }
     }
 
-    private var material: GlassSurface.Material {
+    var material: GlassSurface.Material {
         guard useClassicBlur else { return .glass }
         return model.theme.reduceTransparency ? .opaque : .classic
     }
@@ -62,22 +82,34 @@ final class PanelController {
         self.watcher = watcher
         let model = PanelModel()
         self.model = model
-        let hosting = NSHostingView(rootView: PanelView(model: model))
-        hosting.sizingOptions = []
-        surface = GlassSurface(content: hosting, cornerRadius: PanelGeometry.radius, material: .glass)
+        content = PanelContentView(model: model)
+        board = Board(model: model, content: content)
+        surface = GlassSurface(content: content, cornerRadius: PanelGeometry.radius, material: .glass)
 
         root.wantsLayer = true
         root.addSubview(surface)
+        panel.testDriven = DebugFlags.drivesPanel
+        panel.ignoresMouseEvents = false
         panel.contentView = root
         panel.router = { [unowned self] in self.route($0) }
-        panel.onResignKey = { [unowned self] in self.close() }
-        root.onMouseMoved = { [unowned self] in self.hover(at: $0) }
+        panel.onResignKey = { [unowned self] in
+            // A drag into another app may take the keyboard; the panel stays for the next drag.
+            if self.drag == nil, !DebugFlags.drivesPanel { self.close() }
+        }
+        root.onMouseMoved = { [unowned self] p in
+            self.hover(at: p)
+            self.updatePassThrough(self.panel.convertPoint(toScreen: p))
+        }
         root.onMouseExited = { [unowned self] in self.hover(at: nil) }
-        model.onScroll = { [unowned self] in self.refreshHover() }
+        board.onScroll = { [unowned self] in
+            self.refreshHover()
+            self.historyScrolled()
+        }
         model.onOpenSettings = { [unowned self] in
             self.close()
             Paster.openAccessibilitySettings()
         }
+        dragSource.controller = self
         storeToken = store.addObserver { [weak self] _ in self?.storeChanged() }
 
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
@@ -90,8 +122,25 @@ final class PanelController {
         // One layout pass now, off screen, so the first open has nothing to build.
         applyDisplayOptions()
         layout(on: mouseScreen())
-        reload()
+        rows = savedRows()
+        model.mode = rows > 1 ? .grid : .row
+        reload(.instant)
+        glass.h.set(targetHeight)
+        MotionClock.shared.flush()
         root.layoutSubtreeIfNeeded()
+        warmUp()
+    }
+
+    /// Shows the window once at zero alpha and takes it away again, with the visible cards built,
+    /// so the first open after launch costs what every later one does.
+    private func warmUp() {
+        board.updateCells()
+        MotionClock.shared.flush()
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        panel.displayIfNeeded()
+        panel.orderOut(nil)
+        panel.alphaValue = 1
     }
 
     // MARK: Open and close
@@ -103,39 +152,94 @@ final class PanelController {
         let started = CACurrentMediaTime()
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
+        var marks: [(String, Double)] = []
+        func mark(_ n: String) { if DebugFlags.logGeometry { marks.append((n, (CACurrentMediaTime() - started) * 1000)) } }
         (watcher as? PasteboardWatcher)?.checkNow()
+        mark("watcher")
         layout(on: mouseScreen())
+        mark("layout")
         applyDisplayOptions()
+        mark("display options")
         model.now = Date()
         model.marks = [:]
         markTokens = [:]
-        reload()
+        rows = savedRows()
+        strip = .full
+        model.mode = rows > 1 ? .grid : .row
+        reload(.instant)
+        mark("reload")
         model.selectedID = model.clips.first?.id
         model.focus = .card
         model.needsAccessibility = !Paster.canPost
-        model.scrollPosition.scrollTo(x: 0)
-        model.scrollX = 0
+        glass.h.set(targetHeight)
+        glass.fade.set(1)
+        glass.shift.set(0)
+        board.scroll(to: .zero, instant: true)
+        fitWindow()
+        updateChrome()
+        MotionClock.shared.use(screen: screen)
+        MotionClock.shared.flush()
+        mark("cards placed")
 
         isOpen = true
+        panel.ignoresMouseEvents = false
         panel.orderFrontRegardless()
-        panel.makeKey()
-        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.close() }
+        // A self-test or scene run drives the panel with its own events: it never takes the
+        // keyboard, and clicks in other apps don't close it.
+        if !DebugFlags.drivesPanel {
+            panel.makeKey()
+            clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+                MainActor.assumeIsolated { self?.close() }
+            }
+        }
+        // Outside the glass the window lets clicks through to the apps below; this notices the
+        // pointer coming back over the glass.
+        if !DebugFlags.drivesPanel {
+            moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pointerMovedElsewhere() }
+            }
         }
         refreshHover()
+        updatePassThrough()
+        mark("ordered front")
         if DebugFlags.demoStates { applyDemoStates() }
         logOpen(ms: (CACurrentMediaTime() - started) * 1000)
+        if DebugFlags.logGeometry { debugLog("open steps: " + marks.map { "\($0.0) \(String(format: "%.1f", $0.1))" }.joined(separator: ", ")) }
     }
 
     func close() {
         guard isOpen else { return }
         isOpen = false
-        if let m = clickMonitor { NSEvent.removeMonitor(m) }
+        for m in [clickMonitor, moveMonitor] { if let m { NSEvent.removeMonitor(m) } }
         clickMonitor = nil
+        moveMonitor = nil
+        if let d = drag { finishDrag(d) }
+        if pill != nil {
+            pill = nil
+            board.concealOn = false
+            board.applyConceal()
+        }
+        pillHovered = false
+        content.topBar.pill.setLook(.rest)
+        historyPress = nil
+        content.topBar.history.pressed = false
+        content.topBar.history.hovered = false
         press = nil
         model.setPressed(nil, nil)
         model.setHover(nil, nil)
         panel.orderOut(nil)
+        panel.ignoresMouseEvents = false
+        NSCursor.arrow.set()
+        // Next time it opens on the row or grid again, at its remembered height.
+        history = HistoryState(token: history.token + 1)
+        strip = .full
+        model.mode = rows > 1 ? .grid : .row
+        glass.h.stop()
+        glass.fade.set(1)
+        glass.shift.set(0)
+        reload(.instant)
+        glass.h.set(targetHeight)
+        MotionClock.shared.flush()
     }
 
     private func mouseScreen() -> NSScreen? {
@@ -143,52 +247,76 @@ final class PanelController {
         return NSScreen.screens.first { NSMouseInRect(p, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
     }
 
-    /// Sizes the window from the screen's visible frame, read fresh on every open.
+    /// Sizes everything from the screen's visible frame, read fresh on every open.
     private func layout(on screen: NSScreen?) {
         guard let screen else { return }
         self.screen = screen
         let vf = screen.visibleFrame
         let g = PanelGeometry(visibleWidth: Int(vf.width), visibleHeight: Int(vf.height), screenHeight: Int(screen.frame.height))
-        if g != model.geometry { model.geometry = g }
-        let inset = CGFloat(PanelGeometry.inset)
-        let frame = NSRect(x: vf.minX.rounded(.down), y: vf.minY.rounded(.down), width: CGFloat(Int(vf.width)),
-                           height: inset + CGFloat(g.height + PanelGeometry.shadowRoom))
-        panel.setFrame(frame, display: false)
-        surface.frame = NSRect(x: inset, y: inset, width: CGFloat(g.width), height: CGFloat(g.height))
+        if g != model.geometry {
+            model.geometry = g
+            board.reset()
+        }
+        content.topBar.use(g)
+        let f = windowFrame(glassHeight: Double(g.height))
+        if panel.frame != f { panel.setFrame(f, display: false) }
     }
 
-    private func applyDisplayOptions() {
+    func applyDisplayOptions() {
         let ws = NSWorkspace.shared
         model.theme = Theme(
             increaseContrast: DebugFlags.increaseContrast || ws.accessibilityDisplayShouldIncreaseContrast,
             reduceTransparency: DebugFlags.reduceTransparency || ws.accessibilityDisplayShouldReduceTransparency,
             reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion)
+        Motion.reduce = model.theme.reduceMotion
         surface.material = material
         surface.increaseContrast = model.theme.increaseContrast
+        content.topBar.pill.increaseContrast = model.theme.increaseContrast
     }
 
     // MARK: Clips
 
     private func storeChanged() {
-        if isOpen { reload() } else { stale = true }
+        if isOpen { reload(.reflow) } else { stale = true }
     }
 
-    private func reload() {
+    /// Reads the clips for the current mode and lays the cards out.
+    func reload(_ kind: Board.Kind = .reflow) {
         stale = false
-        let clips = store.ordered(Self.clipLimit)
-        model.clips = clips
-        let ids = Set(clips.map(\.id))
+        model.totalCount = store.count
+        if model.mode == .history {
+            history.loaded = store.newestByDate(max(history.loaded.count, Self.historyPage))
+            history.hasMore = history.loaded.count < store.count
+            model.clips = history.loaded
+        } else {
+            model.clips = store.ordered(Self.clipLimit)
+        }
+        let ids = Set(model.clips.map(\.id))
         if let sel = model.selectedID, !ids.contains(sel) { model.selectedID = nil }
         if model.selectedID == nil {
-            model.selectedID = clips.first?.id
+            model.selectedID = model.clips.first?.id
             model.focus = .card
         }
+        layoutBoard(kind)
+        updateChrome()
+    }
+
+    /// Lays the cards out; while a card is dragged in the row or grid, with its slot open.
+    func layoutBoard(_ kind: Board.Kind) {
+        var clips = model.clips
+        if let d = drag, d.reorderable, let i = clips.firstIndex(where: { $0.id == d.id }) {
+            clips = Reorder.order(clips, moving: i, to: d.slot)
+        }
+        board.layout(clips, mode: model.mode, kind: kind, placeholders: model.mode == .history && history.hasMore)
     }
 
     // MARK: Events
 
-    private func route(_ event: NSEvent) -> NSEvent? {
+    func route(_ event: NSEvent) -> NSEvent? {
         guard isOpen else { return event }
+        if DebugFlags.traceEvents, [.leftMouseDown, .leftMouseDragged, .leftMouseUp].contains(event.type) {
+            debugLog("event \(event.type.rawValue) at \(event.locationInWindow) press \(press != nil) drag \(drag != nil) pill \(pill != nil)")
+        }
         switch event.type {
         case .keyDown:
             handleKey(event)
@@ -196,15 +324,20 @@ final class PanelController {
         case .leftMouseDown:
             return mouseDown(event)
         case .leftMouseDragged:
-            return press == nil ? event : mouseDragged(event)
+            return mouseDragged(event)
         case .leftMouseUp:
-            return press == nil ? event : mouseUp(event)
+            return mouseUp(event)
         case .rightMouseDown, .otherMouseDown:
             if case .outside = hit(event.locationInWindow) { close() }
             return nil
         case .scrollWheel:
-            guard let sideways = Self.wheelAsSideways(event), let scroll = rowScrollView() else { return event }
-            scroll.scrollWheel(with: sideways)
+            guard strip == .full, pill == nil, drag == nil else { return nil }
+            board.userScrolled()
+            if model.mode == .row, let sideways = Self.wheelAsSideways(event) {
+                content.scrollView.scrollWheel(with: sideways)
+            } else {
+                content.scrollView.scrollWheel(with: event)
+            }
             return nil
         default:
             return event
@@ -214,6 +347,12 @@ final class PanelController {
     private func handleKey(_ e: NSEvent) {
         let flags = e.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let cmd = flags.contains(.command), opt = flags.contains(.option), ctrl = flags.contains(.control)
+        // A held pill or card takes no keys, except Esc to drop a card back.
+        if pill != nil { return }
+        if let d = drag {
+            if Int(e.keyCode) == kVK_Escape, d.phase == .drag { cancelDrag(d) }
+            return
+        }
         switch Int(e.keyCode) {
         case kVK_Escape:
             close()
@@ -226,6 +365,13 @@ final class PanelController {
             } else {
                 step(d)
             }
+        case kVK_UpArrow, kVK_DownArrow:
+            let up = Int(e.keyCode) == kVK_UpArrow
+            if opt && !cmd {
+                stepRows(up ? 1 : -1)
+            } else if !cmd {
+                moveVertically(up ? -1 : 1)
+            }
         case kVK_Return, kVK_ANSI_KeypadEnter:
             if !e.isARepeat { activateFocus() }
         case kVK_Space:
@@ -235,8 +381,11 @@ final class PanelController {
         case kVK_Delete, kVK_ForwardDelete:
             if let id = model.selectedID { remove(id) }
         default:
-            if cmd, !ctrl, !opt, e.charactersIgnoringModifiers?.lowercased() == "c", let id = model.selectedID {
+            let key = e.charactersIgnoringModifiers?.lowercased()
+            if cmd, !ctrl, !opt, key == "c", let id = model.selectedID {
                 copy(id)
+            } else if cmd, !ctrl, !opt, key == "y", !e.isARepeat {
+                toggleHistory()
             }
         }
     }
@@ -249,13 +398,20 @@ final class PanelController {
             return nil
         case .panel:
             return event
-        case .card(let i):
-            let id = model.clips[i].id
+        case .pill:
+            if pillEnabled, strip == .full, drag == nil { pillDown(event) }
+            return nil
+        case .history:
+            if historyEnabled {
+                historyPress = true
+                content.topBar.history.pressed = true
+            }
+            return nil
+        case .card(let id):
             press = Press(id: id, button: nil, start: p)
             model.setPressed(id, nil)
             return nil
-        case .button(let i, let b):
-            let id = model.clips[i].id
+        case .button(let id, let b):
             if b == .copy, model.missing.contains(id) { return nil }
             press = Press(id: id, button: b, start: p)
             model.setPressed(id, b)
@@ -264,23 +420,58 @@ final class PanelController {
     }
 
     private func mouseDragged(_ event: NSEvent) -> NSEvent? {
+        if pill != nil {
+            pillMove(event)
+            return nil
+        }
+        if let d = drag {
+            if d.phase == .drag { dragDragged(d, event) }
+            return nil
+        }
+        if historyPress != nil {
+            var inside = false
+            if case .history = hit(event.locationInWindow) { inside = true }
+            historyPress = inside
+            content.topBar.history.pressed = inside
+            return nil
+        }
         guard var p = press else { return event }
         let loc = event.locationInWindow
-        if p.button == nil, !p.moved, hypot(loc.x - p.start.x, loc.y - p.start.y) >= 4 {
-            // Drag-out starts here (day 2). Until then a press that moves is cancelled.
+        if p.button == nil, !p.moved, hypot(loc.x - p.start.x, loc.y - p.start.y) >= PanelGrid.dragThreshold {
             p.moved = true
             press = p
             model.setPressed(nil, nil)
+            // Past 4 pt the press is a drag: the card lifts. A missing image can only be removed.
+            if let clip = clip(p.id), !model.missing.contains(clip.id) {
+                liftDrag(clip, grabbedAt: p.start, event: event)
+            } else {
+                press = nil
+            }
         }
         return nil
     }
 
     private func mouseUp(_ event: NSEvent) -> NSEvent? {
+        if pill != nil {
+            pillUp(event)
+            return nil
+        }
+        if let d = drag {
+            if d.phase == .drag { dragReleased(d, event) }
+            return nil
+        }
+        if let inside = historyPress {
+            historyPress = nil
+            content.topBar.history.pressed = false
+            if inside { toggleHistory() }
+            refreshHover()
+            return nil
+        }
         guard let p = press else { return event }
         press = nil
         model.setPressed(nil, nil)
         if let b = p.button {
-            if case .button(let i, let upOn) = hit(event.locationInWindow), upOn == b, model.clips[i].id == p.id {
+            if case .button(let id, let upOn) = hit(event.locationInWindow), upOn == b, id == p.id {
                 b == .copy ? copy(p.id) : remove(p.id)
             }
         } else if !p.moved {
@@ -310,56 +501,84 @@ final class PanelController {
         return NSEvent(cgEvent: cg)
     }
 
-    /// The row's scroll view inside the SwiftUI content. The swapped wheel event goes straight
-    /// to it, since an event rebuilt from a CGEvent no longer knows which window it was in.
-    private func rowScrollView() -> NSScrollView? {
-        if let s = scrollView, s.window != nil { return s }
-        func search(_ v: NSView) -> NSScrollView? {
-            if let s = v as? NSScrollView { return s }
-            for sub in v.subviews { if let s = search(sub) { return s } }
-            return nil
-        }
-        scrollView = search(surface.content)
-        return scrollView
-    }
-
-    /// What is under a point in window coordinates. Cards sit at fixed whole-point positions,
-    /// so this is plain arithmetic on the layout and the scroll offset.
-    private func hit(_ p: NSPoint) -> Hit {
-        let g = model.geometry
+    /// What is under a point in window coordinates.
+    func hit(_ p: NSPoint) -> Hit {
         let f = surface.frame
         guard f.contains(p) else { return .outside }
+        guard strip == .full else { return .panel }
         let x = p.x - f.minX, y = f.maxY - p.y
-        let cy = y - CGFloat(g.cardTop)
-        guard !model.clips.isEmpty, cy >= 0, cy < CGFloat(g.cardHeight) else { return .panel }
-        let cx = x + model.scrollX - CGFloat(g.sidePadding)
-        guard cx >= 0 else { return .panel }
-        let i = Int(cx / CGFloat(g.pitch))
-        let lx = cx - CGFloat(i * g.pitch)
-        guard i < model.clips.count, lx < CGFloat(g.cardWidth) else { return .panel }
+        let local = NSPoint(x: x, y: y)
+        if pillVisible, PillView.hitRect(panelWidth: f.width).contains(local) { return .pill }
+        if y < CGFloat(CardLayout.topBar), HistoryButtonView.rect(panelWidth: f.width).contains(local) { return .history }
+        let sy = y - CGFloat(PanelGrid.scrollTop)
+        guard sy >= 0, !model.clips.isEmpty else { return .panel }
+        let v = board.viewport
+        guard let (id, l) = board.card(at: CGPoint(x: x + v.minX, y: sy + v.minY)) else { return .panel }
         // 20 pt buttons, 6 pt from the right edge and 4 pt apart, centred in the 26 pt header.
-        if cy >= 3, cy < 23 {
-            let right = CGFloat(g.cardWidth - 6)
-            if lx >= right - 20, lx < right { return .button(i, .remove) }
-            if lx >= right - 44, lx < right - 24 { return .button(i, .copy) }
+        if l.y >= 3, l.y < 23 {
+            let right = CGFloat(model.geometry.cardWidth - 6)
+            if l.x >= right - 20, l.x < right { return .button(id, .remove) }
+            if l.x >= right - 44, l.x < right - 24 { return .button(id, .copy) }
         }
-        return .card(i)
+        return .card(id)
     }
 
     private func hover(at p: NSPoint?) {
-        guard isOpen, press == nil else { return }
-        guard let p else { return model.setHover(nil, nil) }
-        switch hit(p) {
-        case .card(let i): model.setHover(model.clips[i].id, nil)
-        case .button(let i, let b): model.setHover(model.clips[i].id, b)
-        default: model.setHover(nil, nil)
+        guard isOpen, press == nil, pill == nil, drag == nil, historyPress == nil else { return }
+        var overPill = false, overHistory = false
+        if let p {
+            switch hit(p) {
+            case .card(let id): model.setHover(id, nil)
+            case .button(let id, let b): model.setHover(id, b)
+            case .pill:
+                overPill = true
+                model.setHover(nil, nil)
+            case .history:
+                overHistory = true
+                model.setHover(nil, nil)
+            default: model.setHover(nil, nil)
+            }
+        } else {
+            model.setHover(nil, nil)
         }
+        setPillHover(overPill)
+        content.topBar.history.hovered = overHistory && historyEnabled
     }
 
-    private func refreshHover() {
-        guard isOpen else { return }
+    func refreshHover() {
+        guard isOpen, !DebugFlags.drivesPanel else { return }
         hover(at: panel.convertPoint(fromScreen: NSEvent.mouseLocation))
     }
+
+    private func setPillHover(_ on: Bool) {
+        guard on != pillHovered else { return }
+        pillHovered = on
+        content.topBar.pill.setLook(on ? .hover : .rest)
+        (on ? Self.resizeCursor(.all) : NSCursor.arrow).set()
+    }
+
+    /// Outside the glass, clicks go through to the apps below; over it, the panel takes them.
+    func updatePassThrough(_ point: NSPoint? = nil) {
+        guard isOpen else { return }
+        if let d = drag, d.phase == .session { return }
+        if pill != nil || press != nil || historyPress != nil || drag != nil {
+            if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
+            return
+        }
+        let p = point ?? NSEvent.mouseLocation
+        let pass = !glassScreenRect.contains(p)
+        if panel.ignoresMouseEvents != pass { panel.ignoresMouseEvents = pass }
+    }
+
+    private func pointerMovedElsewhere() {
+        guard isOpen else { return }
+        let p = NSEvent.mouseLocation
+        updatePassThrough(p)
+        if !panel.ignoresMouseEvents { hover(at: panel.convertPoint(fromScreen: p)) } else { hover(at: nil) }
+    }
+
+    /// The glass on screen, as drawn now.
+    var glassScreenRect: NSRect { panel.convertToScreen(surface.frame) }
 
     // MARK: Selection and focus
 
@@ -369,40 +588,61 @@ final class PanelController {
         selectIndex(min(max(i, 0), model.clips.count - 1))
     }
 
-    private func selectIndex(_ i: Int) {
+    func selectIndex(_ i: Int) {
         guard model.clips.indices.contains(i) else { return }
         select(model.clips[i].id)
     }
 
-    private func select(_ id: UUID) {
+    func select(_ id: UUID) {
         if model.selectedID != id { model.selectedID = id }
         if model.focus != .card { model.focus = .card }
         scrollToSelection()
     }
 
-    /// Keeps the selected card in view with one card of margin.
-    private func scrollToSelection() {
-        guard let i = model.selectedIndex else { return }
-        let g = model.geometry
-        let x = CGFloat(g.cardX(i)), cw = CGFloat(g.cardWidth), m = CGFloat(g.pitch)
-        let pad = CGFloat(g.sidePadding), w = CGFloat(g.width)
-        let current = model.scrollX
-        var target = current
-        if x - m < current + pad {
-            target = x - m - pad
-        } else if x + cw + m > current + w - pad {
-            target = x + cw + m - w + pad
-        }
-        target = min(max(target, 0), g.maxScroll(count: model.clips.count))
-        guard abs(target - current) > 0.5 else { return }
-        model.scrollPosition.scrollTo(x: target)
-        model.scrollX = target
-        refreshHover()
+    /// ↑ and ↓ in the grid and history: the same column in the row above or below (or its last card).
+    private func moveVertically(_ d: Int) {
+        guard model.mode != .row, let id = model.selectedID else { return }
+        let rows = board.rows
+        guard let r = rows.firstIndex(where: { $0.contains(id) }), let col = rows[r].firstIndex(of: id),
+              rows.indices.contains(r + d), !rows[r + d].isEmpty else { return }
+        select(rows[r + d][min(col, rows[r + d].count - 1)])
     }
 
-    /// ⌥⌘← / ⌥⌘→ move the selected card one place.
+    /// Keeps the selected card in view with one card of margin, on `quick`.
+    func scrollToSelection(instant: Bool = false) {
+        guard let id = model.selectedID, let r = board.restingRect(id) else { return }
+        let g = model.geometry.grid
+        let dest = board.scrollDestination
+        if model.mode == .row {
+            let m = CGFloat(g.pitchX), pad = CGFloat(g.sidePadding), w = CGFloat(model.geometry.width)
+            var t = dest.x
+            if r.minX - m < t + pad {
+                t = r.minX - m - pad
+            } else if r.maxX + m > t + w - pad {
+                t = r.maxX + m - w + pad
+            }
+            if abs(t - dest.x) > 0.5 { board.scroll(to: CGPoint(x: t, y: 0), instant: instant) }
+        } else {
+            let viewH = CGFloat(glass.h.dest) - CGFloat(PanelGrid.scrollTop)
+            let head = CGFloat(model.mode == .history ? PanelGrid.headerHeight : 0)
+            let m = min(CGFloat(g.pitchY), max(0, (viewH - CGFloat(g.cardHeight) - head) / 2))
+            let top = r.minY - m - head, bottom = r.maxY + m
+            var t = dest.y
+            if top < t {
+                t = top
+            } else if bottom > t + viewH {
+                t = bottom - viewH
+            }
+            let maxY = max(0, board.contentSize.height - viewH)
+            t = min(max(t, 0), maxY)
+            if abs(t - dest.y) > 0.5 { board.scroll(to: CGPoint(x: 0, y: t), instant: instant) }
+        }
+    }
+
+    /// ⌥⌘← / ⌥⌘→ move the selected card one place (not in history, which stays by date).
     private func moveSelected(by d: Int) {
-        guard let id = model.selectedID, let i = model.selectedIndex, model.clips.indices.contains(i + d) else { return }
+        guard model.mode != .history, let id = model.selectedID, let i = model.selectedIndex,
+              model.clips.indices.contains(i + d) else { return }
         store.move(id: id, toIndex: i + d)
         if stale { reload() }
         scrollToSelection()
@@ -413,22 +653,29 @@ final class PanelController {
         var zones: [FocusZone] = [.card]
         if !model.missing.contains(id) { zones.append(.copy) }
         zones.append(.remove)
+        if historyEnabled { zones.append(.history) }
         let i = zones.firstIndex(of: model.focus) ?? 0
         model.focus = zones[(i + d + zones.count) % zones.count]
+        content.topBar.history.focused = model.focus == .history
     }
 
     private func activateFocus() {
+        if model.focus == .history {
+            toggleHistory()
+            return
+        }
         guard let id = model.selectedID else { return }
         switch model.focus {
         case .card: paste(id)
         case .copy: copy(id)
         case .remove: remove(id)
+        case .history: break
         }
     }
 
     // MARK: Actions
 
-    private func clip(_ id: UUID) -> Clip? { model.clips.first { $0.id == id } }
+    func clip(_ id: UUID) -> Clip? { model.clips.first { $0.id == id } }
 
     /// An image clip whose file has gone is disabled: it can only be removed.
     private func isUsable(_ clip: Clip) -> Bool {
@@ -444,6 +691,10 @@ final class PanelController {
     /// the clip stays on the clipboard and a toast says so.
     private func paste(_ id: UUID) {
         guard let clip = clip(id), isUsable(clip) else { return }
+        if let intercept = pasteInterceptor {
+            intercept(id)
+            return
+        }
         let started = CACurrentMediaTime()
         let target = previousApp
         let screen = self.screen
@@ -501,7 +752,8 @@ final class PanelController {
     }
 
     /// The selection moves to the right neighbour, or the left one if the card was last.
-    private func remove(_ id: UUID) {
+    /// The neighbours close the gap on `settle`.
+    func remove(_ id: UUID) {
         guard let i = model.clips.firstIndex(where: { $0.id == id }) else { return }
         let wasSelected = model.selectedID == id
         store.remove(id: id)
@@ -512,7 +764,7 @@ final class PanelController {
         refreshHover()
     }
 
-    private func showToast(on screen: NSScreen?) {
+    func showToast(on screen: NSScreen?) {
         toast.show(Self.toastText, on: screen, material: material, increaseContrast: model.theme.increaseContrast)
     }
 
@@ -531,79 +783,14 @@ final class PanelController {
     private func logOpen(ms: Double) {
         guard DebugFlags.logGeometry, let screen else { return }
         let g = model.geometry, vf = screen.visibleFrame
-        let glass = panel.convertToScreen(surface.convert(surface.bounds, to: nil))
         debugLog("open took \(String(format: "%.1f", ms)) ms; key \(panel.isKeyWindow); front app \(previousApp?.localizedName ?? "none")")
         debugLog("screen \(screen.frame) visible \(vf) scale \(screen.backingScaleFactor)")
-        debugLog("window \(panel.frame); glass on screen \(glass)")
+        debugLog("window \(panel.frame); glass on screen \(glassScreenRect)")
         debugLog("panel height \(g.height) = screen height \(Int(screen.frame.height)) ÷ 6 → \(Int(screen.frame.height) / 6); width \(g.width)")
-        debugLog("cards \(g.cardWidth) × \(g.cardHeight), \(g.layout.count) across, gap \(CardLayout.gap), side padding \(g.sidePadding), lines \(g.lines), rows that fit \(g.layout.rows(forHeight: g.visibleHeight - 2 * PanelGeometry.inset))")
-        debugLog("clips \(model.clips.count); material \(material); theme \(model.theme)")
-        for other in NSScreen.screens where other != screen {
-            let v = other.visibleFrame, o = PanelGeometry(visibleWidth: Int(v.width), visibleHeight: Int(v.height), screenHeight: Int(other.frame.height))
-            debugLog("on \(Int(other.frame.width))×\(Int(other.frame.height)) (visible \(Int(v.width))×\(Int(v.height))): panel \(o.width)×\(o.height), cards \(o.cardWidth)×\(o.cardHeight), \(o.layout.count) across, side padding \(o.sidePadding), lines \(o.lines)")
+        debugLog("cards \(g.cardWidth) × \(g.cardHeight), \(g.layout.count) across, gap \(CardLayout.gap), side padding \(g.sidePadding), lines \(g.lines), rows that fit \(g.grid.maxRows), heights \((1...g.grid.maxRows).map { g.grid.height(rows: $0) })")
+        debugLog("clips \(model.clips.count); rows \(rows); mode \(model.mode); material \(material); theme \(model.theme)")
+        for (i, r) in board.cellFrames(3).enumerated() {
+            debugLog("card \(i) in the scroll content: x \(r.minX) y \(r.minY) w \(r.width) h \(r.height)")
         }
-    }
-
-    /// `--self-test`: drives the panel's own event router with synthetic keys, a wheel notch and
-    /// a click, and logs the result of each. Nothing is posted to the system and nothing is
-    /// pasted or copied, so the clipboard is untouched.
-    func runSelfTest() async {
-        func key(_ code: Int, _ flags: NSEvent.ModifierFlags = [], _ chars: String = "") {
-            if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                                        windowNumber: panel.windowNumber, context: nil, characters: chars,
-                                        charactersIgnoringModifiers: chars, isARepeat: false, keyCode: UInt16(code)) {
-                panel.sendEvent(e)
-            }
-        }
-        func click(_ p: NSPoint) {
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                if let e = NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0,
-                                              windowNumber: panel.windowNumber, context: nil, eventNumber: 0,
-                                              clickCount: 1, pressure: 1) {
-                    panel.sendEvent(e)
-                }
-            }
-        }
-        func report(_ step: String) {
-            let first = model.clips.first?.plainText?.prefix(12) ?? "-"
-            debugLog("self-test \(step): selected \(model.selectedIndex ?? -1) of \(model.clips.count), focus \(model.focus), scrollX \(model.scrollX), first \"\(first)\", open \(isOpen)")
-        }
-        func settle() async { try? await Task.sleep(for: .milliseconds(250)) }
-        let g = model.geometry
-        await settle()
-        report("opened")
-        for _ in 0..<3 { key(kVK_RightArrow) }
-        report("→ ×3 (expect 3)")
-        key(kVK_RightArrow, .command); await settle()
-        report("⌘→ (expect last, scrolled to max \(g.maxScroll(count: model.clips.count)))")
-        key(kVK_LeftArrow, .command); await settle()
-        report("⌘← (expect 0, scroll 0)")
-        let firstID = model.clips.first?.id
-        key(kVK_RightArrow, [.command, .option]); await settle()
-        report("⌥⌘→ (expect selected 1, moved card now at 1: \(model.clips.firstIndex { $0.id == firstID } ?? -1))")
-        key(kVK_Tab); report("Tab (expect copy)")
-        key(kVK_Tab); report("Tab (expect remove)")
-        key(kVK_Tab); report("Tab (expect card)")
-        key(kVK_Tab, .shift); report("⇧Tab (expect remove)")
-        let count = model.clips.count
-        key(kVK_Return); await settle()
-        report("Return on Remove (expect \(count - 1) clips, selected 1, focus card)")
-        key(kVK_Delete); await settle()
-        report("Delete (expect \(count - 2) clips, selected 1)")
-        if let cg = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0, wheel3: 0),
-           let wheel = NSEvent(cgEvent: cg) {
-            _ = route(wheel)
-            try? await Task.sleep(for: .milliseconds(600))
-            report("mouse wheel 3 notches down (expect scrollX > 0)")
-        }
-        model.scrollPosition.scrollTo(x: 0); model.scrollX = 0; await settle()
-        let remove = NSPoint(x: surface.frame.minX + CGFloat(g.sidePadding + g.cardWidth - 16),
-                             y: surface.frame.maxY - CGFloat(g.cardTop + 13))
-        click(remove); await settle()
-        report("click on card 0's Remove (expect \(count - 3) clips)")
-        key(kVK_Escape)
-        report("Esc (expect open false)")
-        showToast(on: screen)
-        debugLog("toast shown at \(toast.frame) on visible \(screen?.visibleFrame ?? .zero)")
     }
 }

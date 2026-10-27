@@ -36,10 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             debugLog("debug run: in-memory store, no watcher, no hotkey, no menu bar icon")
         }
-        if DebugFlags.showPanel || DebugFlags.selfTest {
+        if DebugFlags.showPanel || DebugFlags.selfTest || DebugFlags.scene != nil {
             Task {
                 panel.open()
                 if DebugFlags.selfTest { await panel.runSelfTest() }
+                if let scene = DebugFlags.scene { await panel.showScene(scene) }
             }
         }
     }
@@ -47,5 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         environment?.watcher.stop()
         DemoExtras.cleanUp()
+        DragPasteboard.cleanUp()
     }
 }

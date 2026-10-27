@@ -9,6 +9,8 @@ struct CardView: View {
     let theme: Theme
     let now: Date
     var onMissing: (UUID) -> Void = { _ in }
+    /// The drag preview: an opaque card with no ring and no buttons.
+    var preview = false
 
     private var w: CGFloat { CGFloat(geometry.cardWidth) }
     private var h: CGFloat { CGFloat(geometry.cardHeight) }
@@ -19,7 +21,7 @@ struct CardView: View {
         // Under Reduce Motion a press darkens instead of shrinking.
         let darkPress = state.pressed && theme.reduceMotion
         ZStack(alignment: .topLeading) {
-            shape.fill(theme.cardFill)
+            shape.fill(preview ? theme.previewFill : theme.cardFill)
             shape.strokeBorder(theme.cardHair, lineWidth: 0.5)
             if let border = theme.cardBorder { shape.strokeBorder(border, lineWidth: 1) }
             if darkPress {
@@ -57,7 +59,7 @@ struct CardView: View {
         }
         .frame(width: w, height: h, alignment: .topLeading)
         .overlay {
-            if state.selected {
+            if state.selected && !preview {
                 let ring = theme.ringWidth
                 RoundedRectangle(cornerRadius: 14 + ring, style: .continuous)
                     .strokeBorder(theme.accent, lineWidth: ring)
@@ -81,7 +83,7 @@ struct CardView: View {
                 .foregroundStyle(theme.label2)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            if state.buttonsShown {
+            if state.buttonsShown && !preview {
                 HStack(spacing: 4) {
                     CardButtonView(
                         symbol: copySymbol, help: "Copy",
@@ -153,6 +155,16 @@ struct ThumbView: View {
     let box: CGSize
     let onMissing: (UUID) -> Void
     @State private var thumb: Thumbnail?
+
+    init(clip: Clip, missing: Bool, theme: Theme, box: CGSize, onMissing: @escaping (UUID) -> Void) {
+        self.clip = clip
+        self.missing = missing
+        self.theme = theme
+        self.box = box
+        self.onMissing = onMissing
+        // A thumbnail already decoded shows on the first frame (a recycled card, the drag preview).
+        _thumb = State(initialValue: ThumbnailStore.shared.cached(clip.id))
+    }
 
     var body: some View {
         ZStack {
