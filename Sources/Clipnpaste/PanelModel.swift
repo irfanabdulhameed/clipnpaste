@@ -70,7 +70,9 @@ struct CardState: Equatable {
     var focus: FocusZone?
     var mark: CopyMark?
     var missing = false
-    var buttonsShown: Bool { selected || hovered }
+    /// Card buttons set to Always in Settings.
+    var buttonsAlways = false
+    var buttonsShown: Bool { buttonsAlways || selected || hovered }
 }
 
 /// Row (one row), grid (the pill pulled up) or history (all clips by day).
@@ -97,6 +99,8 @@ final class PanelModel {
     var mode: PanelMode = .row
     /// All clips in the store, for the history title.
     var totalCount = 0
+    /// Card buttons on every card, not only the hovered and selected one (Settings › Panel).
+    var buttonsAlways = false
 
     @ObservationIgnored var onOpenSettings: (() -> Void)?
     /// The board's card motion: called with the old and new (card, button) when hover or press changes.
@@ -115,7 +119,8 @@ final class PanelModel {
             pressedButton: isPressed ? pressedButton : nil,
             focus: selectedID == id ? focus : nil,
             mark: marks[id],
-            missing: missing.contains(id)
+            missing: missing.contains(id),
+            buttonsAlways: buttonsAlways
         )
     }
 

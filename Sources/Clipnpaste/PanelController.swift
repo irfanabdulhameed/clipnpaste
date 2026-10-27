@@ -8,7 +8,6 @@ import ClipnpasteCore
 @MainActor
 final class PanelController {
     static let clipLimit = 200
-    private static let classicBlurKey = "useClassicBlur"
     private static let toastText = "Copied. Press ⌘V to paste."
     /// Older clips page into history this many at a time.
     static var historyPage: Int { DebugFlags.historyPage ?? 200 }
@@ -50,6 +49,10 @@ final class PanelController {
     var copyInterceptor: ((UUID) -> Void)?
     /// `--self-test`: an intercepted paste still runs the exit, as a real one does.
     var interceptedPasteCloses = false
+    /// ⌘, in the panel: it closes, and Settings opens.
+    var onOpenSettings: (() -> Void)?
+    /// Every setting, read live (Settings › Panel and Motion).
+    let prefs = Preferences.app
 
     /// Closed, opening, open or closing (see PanelMotion.swift).
     var phase: PanelPhase = .closed
@@ -70,14 +73,13 @@ final class PanelController {
         case button(UUID, CardButton)
     }
 
-    enum Strip { case full, strip }
+    /// Full height, the 40 pt strip, or slid out of sight while a card is dragged out (Settings › Motion).
+    enum Strip { case full, strip, slid }
 
+    /// The menu's "Use classic blur": the Glass setting's classic blur, or Liquid Glass.
     var useClassicBlur: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.classicBlurKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: Self.classicBlurKey)
-            refreshDisplayOptions()
-        }
+        get { prefs.glass == .classic }
+        set { prefs.glass = newValue ? .classic : .liquid }
     }
 
     /// `--self-test`: runs the panel on a given surface without touching the saved setting.
@@ -85,8 +87,11 @@ final class PanelController {
 
     var material: GlassSurface.Material {
         if let m = materialOverride { return m }
-        guard useClassicBlur else { return .glass }
-        return model.theme.reduceTransparency ? .opaque : .classic
+        switch prefs.glass {
+        case .liquid: return .glass
+        case .classic: return model.theme.reduceTransparency ? .opaque : .classic
+        case .solid: return .opaque
+        }
     }
 
     init(store: any ClipStore, watcher: any ClipboardWatcher) {
@@ -131,6 +136,15 @@ final class PanelController {
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.close() } })
+        // Settings apply at once, open or closed.
+        prefs.observe { [weak self] key in
+            guard let self else { return }
+            switch key {
+            case .glass, .reduceMotion, .cardButtons: refreshDisplayOptions()
+            case .panelRows: applyRowsSetting()
+            default: break
+            }
+        }
 
         // One layout pass now, off screen, so the first open has nothing to build.
         applyDisplayOptions()
@@ -306,7 +320,10 @@ final class PanelController {
         }
     }
 
-    private func mouseScreen() -> NSScreen? {
+    /// The screen the panel opens on: the one with the pointer, or the main screen (the one with
+    /// the menu bar) when Settings › General says so.
+    func mouseScreen() -> NSScreen? {
+        if prefs.openOn == .main, let main = NSScreen.screens.first { return main }
         let p = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(p, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
     }
@@ -328,7 +345,7 @@ final class PanelController {
 
     /// A setting changed while the app runs. A new surface (Reduce Transparency's opaque one, or
     /// classic blur) is drawn once off screen while closed, so the next rise keeps its frames.
-    private func refreshDisplayOptions() {
+    func refreshDisplayOptions() {
         let before = surface.material
         applyDisplayOptions()
         if phase == .closed, surface.material != before { warmUp() }
@@ -339,8 +356,10 @@ final class PanelController {
         model.theme = Theme(
             increaseContrast: DebugFlags.increaseContrast || ws.accessibilityDisplayShouldIncreaseContrast,
             reduceTransparency: DebugFlags.reduceTransparency || ws.accessibilityDisplayShouldReduceTransparency,
-            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion)
+            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion
+                || prefs.reduceMotion == .always)
         Motion.reduce = model.theme.reduceMotion
+        if model.buttonsAlways != (prefs.cardButtons == .always) { model.buttonsAlways = prefs.cardButtons == .always }
         surface.material = material
         surface.increaseContrast = model.theme.increaseContrast
         content.topBar.pill.increaseContrast = model.theme.increaseContrast
@@ -466,12 +485,20 @@ final class PanelController {
             if let id = model.selectedID { remove(id) }
         default:
             let key = e.charactersIgnoringModifiers?.lowercased()
-            if cmd, !ctrl, !opt, key == "c", let id = model.selectedID {
+            if cmd, !ctrl, !opt, key == ",", !e.isARepeat {
+                openSettings()
+            } else if cmd, !ctrl, !opt, key == "c", let id = model.selectedID {
                 copy(id)
             } else if cmd, !ctrl, !opt, key == "y", !e.isARepeat {
                 toggleHistory()
             }
         }
+    }
+
+    /// ⌘,: the panel closes first, then Settings opens.
+    func openSettings() {
+        close()
+        onOpenSettings?()
     }
 
     private func mouseDown(_ event: NSEvent) -> NSEvent? {

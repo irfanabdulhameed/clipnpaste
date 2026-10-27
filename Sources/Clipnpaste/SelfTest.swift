@@ -331,6 +331,10 @@ extension PanelController {
         // Panel-level motion: rise, interruption, exit after a paste, history, toast (Diagnostics.swift).
         await runPanelMotionChecks { check($0, $1, $2) }
 
+        // Settings apply live: height, glass, card buttons, pop, selection, tilt, drag-out, after
+        // a drop, entrance, Reduce Motion, slow motion, screen, appearance (SelfTestPreferences.swift).
+        await preferencesChecks { check($0, $1, $2) }
+
         debugLog("self-test done: \(r.passed) passed, \(r.failed) failed")
         showToast(on: screen)
         debugLog("toast shown at \(toast.frame) on visible \(screen?.visibleFrame ?? .zero)")

@@ -3,13 +3,20 @@ import ImageIO
 import UniformTypeIdentifiers
 import ClipnpasteCore
 
-/// Builds the clip store and the clipboard watcher. The only file that knows which ones the app uses.
+/// Builds the clip store and the clipboard watcher, and holds what Settings works on. The only
+/// file that knows which store and watcher the app uses.
 @MainActor
 struct AppEnvironment {
     let store: any ClipStore
     let watcher: any ClipboardWatcher
+    let preferences: Preferences
+    /// Applies the Privacy limits to the store and counts what a tighter one would remove.
+    let retention: Retention
+    /// Where clips and images are kept (a temporary folder in a debug run).
+    let dataFolder: URL
 
     static func make() throws -> AppEnvironment {
+        let prefs = Preferences.app
         // Any debug or demo flag keeps the in-memory store and no watcher, so checks never
         // touch the real history or clipboard.
         if DebugFlags.usesDemoStore {
@@ -17,17 +24,35 @@ struct AppEnvironment {
             if DebugFlags.demoExtra { DemoExtras.add(to: store) }
             let watcher = NoOpWatcher()
             watcher.start()
-            return AppEnvironment(store: store, watcher: watcher)
+            return AppEnvironment(store: store, watcher: watcher, preferences: prefs, dataFolder: DemoExtras.folder)
         }
-        let store = try SQLiteClipStore(directory: SQLiteClipStore.defaultDirectory)
+        let store = try SQLiteClipStore(directory: SQLiteClipStore.defaultDirectory,
+                                        maxClips: prefs.maxClips, maxImageBytes: prefs.maxImageBytes)
         let watcher = PasteboardWatcher(store: store)
+        watcher.rules = prefs.captureRules
         watcher.start()
-        return AppEnvironment(store: store, watcher: watcher)
+        return AppEnvironment(store: store, watcher: watcher, preferences: prefs, dataFolder: store.files.root)
     }
 
     /// Used when the store cannot be opened, so the panel still works for this session.
     static func fallback() -> AppEnvironment {
-        AppEnvironment(store: InMemoryClipStore(), watcher: NoOpWatcher())
+        AppEnvironment(store: InMemoryClipStore(), watcher: NoOpWatcher(), preferences: .app,
+                       dataFolder: SQLiteClipStore.defaultDirectory)
+    }
+
+    private init(store: any ClipStore, watcher: any ClipboardWatcher, preferences: Preferences, dataFolder: URL) {
+        self.store = store
+        self.watcher = watcher
+        self.preferences = preferences
+        self.dataFolder = dataFolder
+        retention = Retention(store: store, preferences: preferences)
+        retention.apply()
+        let watcher = watcher
+        preferences.observe { key in
+            guard key == .ignoredApps || key == .captureUniversalClipboard,
+                  let w = watcher as? PasteboardWatcher else { return }
+            w.rules = Preferences.app.captureRules
+        }
     }
 }
 

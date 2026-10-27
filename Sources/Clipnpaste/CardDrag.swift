@@ -260,7 +260,7 @@ extension PanelController {
         } else {
             preview.sc.spring(to: 1.04, duration: Motion.quick)
             preview.lift.spring(to: 1, duration: Motion.quick)
-            preview.rot.spring(to: DragTilt.lift, duration: Motion.settle)
+            preview.rot.spring(to: prefs.dragTilt == .fixed45 ? -45 : DragTilt.lift, duration: Motion.settle)
         }
         d.hook = MotionClock.shared.addHook { [weak self, weak d] dt in
             guard let self, let d else { return }
@@ -278,7 +278,8 @@ extension PanelController {
             let p = NSEvent.mouseLocation
             if p != d.pointer { dragMoved(d, to: p, time: ProcessInfo.processInfo.systemUptime) }
         }
-        if !Motion.reduce {
+        // −6° plus up to ±8° from horizontal speed; the −45° alternative holds still.
+        if !Motion.reduce, prefs.dragTilt == .speed {
             let v = d.velocity.velocity(at: ProcessInfo.processInfo.systemUptime)
             d.preview.rot.spring(to: DragTilt.angle(velocityX: v.x), duration: Motion.track)
         }
@@ -340,18 +341,21 @@ extension PanelController {
         let g = glassScreenRect
         guard p.x >= g.minX, p.x <= g.maxX else { return false }
         if strip == .strip { return p.y <= g.minY + CGFloat(PanelGrid.stripHeight) + 24 }
+        // Slid away: the bottom 40 pt brings it back.
+        if strip == .slid { return p.y <= g.minY + CGFloat(PanelGrid.stripHeight) }
         return p.y <= g.minY + CGFloat(glass.h.dest)
     }
 
     /// The window takes the drop only over the glass; elsewhere drops go to the apps below.
     private func overPanelWindow(_ p: NSPoint) -> Bool {
-        glassScreenRect.insetBy(dx: 0, dy: strip == .strip ? -12 : 0).contains(p)
+        if strip == .slid { return overPanel(p) }
+        return glassScreenRect.insetBy(dx: 0, dy: strip == .strip ? -12 : 0).contains(p)
     }
 
     private func zoneChanged(_ d: CardDrag) {
         let rm = Motion.reduce
         if d.over {
-            exitStrip()
+            restorePanel()
             if rm { d.preview.sc.set(1) } else { d.preview.sc.spring(to: 1.04, duration: Motion.quick) }
         } else {
             // Its old slot is kept for it while it is away.
@@ -359,7 +363,7 @@ extension PanelController {
                 d.slot = d.from
                 layoutBoard(.reflow)
             }
-            enterStrip()
+            cardLeftPanel()
             if rm { d.preview.sc.set(0.7) } else { d.preview.sc.spring(to: 0.7, duration: Motion.quick) }
         }
     }
@@ -414,7 +418,7 @@ extension PanelController {
         } else {
             cancelDrag(d)
         }
-        if !DebugFlags.drivesPanel { panel.makeKey() }
+        if !DebugFlags.drivesPanel, isOpen { panel.makeKey() }
     }
 
     // MARK: Endings
@@ -446,7 +450,7 @@ extension PanelController {
         d.phase = .landing
         MotionClock.shared.removeHook(d.hook)
         d.hook = nil
-        exitStrip()
+        restorePanel()
         if target != d.from {
             // Into the store now; the cards already stand in this order, so nothing jumps.
             store.move(id: d.id, toIndex: target)
@@ -476,7 +480,8 @@ extension PanelController {
     }
 
     /// Another app took the drop: the preview shrinks 0.7 → 0.6 and fades on `leave` at the drop
-    /// point, and the panel grows back so another card can be dragged.
+    /// point, and the panel grows back so another card can be dragged, or closes, as Settings ›
+    /// Motion › After a drop says.
     private func dropAccepted(_ d: CardDrag) {
         d.phase = .landing
         MotionClock.shared.removeHook(d.hook)
@@ -486,13 +491,19 @@ extension PanelController {
             layoutBoard(.reflow)
         }
         board.ghostID = nil
-        exitStrip()
+        let closes = prefs.afterDrop == .close
+        if !closes { restorePanel() }
         let pv = d.preview
         if Motion.reduce {
             pv.op.tween(to: 0, ms: 100) { [weak self] in self?.finishDrag(d) }
         } else {
             pv.sc.tween(to: pv.sc.v * (0.6 / 0.7), ms: 120, ease: Motion.leave)
             pv.op.tween(to: 0, ms: 120, ease: Motion.leave) { [weak self] in self?.finishDrag(d) }
+        }
+        if closes {
+            // The panel leaves as it does after a paste; the preview finishes its own fade.
+            drag = nil
+            close()
         }
     }
 
@@ -505,7 +516,7 @@ extension PanelController {
         d.preview.close()
         if drag === d { drag = nil }
         if board.ghostID == d.id { board.ghostID = nil }
-        if strip == .strip, isOpen { exitStrip() }
+        if strip != .full, isOpen { restorePanel() }
         fitWindow()
         refreshHover()
         debugLog("drag: finished; preview window closed")
