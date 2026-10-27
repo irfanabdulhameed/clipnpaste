@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="232" height="52" viewBox="0 0 232 52" role="img" aria-label="Download Clipnpaste for Mac">
+  <title>Download Clipnpaste for Mac</title>
+  <rect width="232" height="52" rx="26" fill="#5B3FD6"/>
+  <rect x="0.5" y="0.5" width="231" height="51" rx="25.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.18"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M36 15.5v14.5"/>
+    <path d="M29.5 24l6.5 6.5 6.5-6.5"/>
+    <path d="M28 36.5h16"/>
+  </g>
+  <text x="56" y="32" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="600">Download for Mac</text>
+</svg>

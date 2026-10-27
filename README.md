@@ -8,6 +8,7 @@
 
 Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> and a frosted glass panel rises from the bottom of the screen with your clipboard history as a row of cards. Pick one and it pastes straight into the app you were in. A native macOS menu bar app that keeps everything on your Mac, with no account and no network.
 
+![Latest release](https://img.shields.io/github/v/release/irfanabdulhameed/clipnpaste?label=release&color=5b3fd6)
 ![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000?logo=apple&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![Liquid Glass](https://img.shields.io/badge/macOS%2026-Liquid%20Glass-7b61ff)
@@ -15,11 +16,15 @@ Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V
 ![No dependencies](https://img.shields.io/badge/dependencies-0-2ea44f)
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
 
-<sub>Version 0.1 is in active development; the first release is coming soon.</sub>
-
 <br>
 
-[Features](#features) · [How to use](#how-to-use-the-clipboard-history-panel) · [Privacy](#privacy) · [Build from source](#build-from-source) · [Permissions](#permissions) · [FAQ](#faq)
+<a href="https://github.com/irfanabdulhameed/clipnpaste/releases/latest/download/Clipnpaste.dmg"><img src="docs/images/download-button.svg" width="232" height="52" alt="Download Clipnpaste for Mac"></a>
+
+<sub>macOS 26 Tahoe or later · free and open source · <a href="#download">first-time setup</a></sub>
+
+<br><br>
+
+[Features](#features) · [How to use](#how-to-use-the-clipboard-history-panel) · [Privacy](#privacy) · [Download](#download) · [Build from source](#build-from-source) · [Permissions](#permissions) · [FAQ](#faq)
 
 </div>
 
@@ -83,9 +88,26 @@ Clipnpaste is a **local-only clipboard manager**. Your clipboard can hold passwo
 - **Passwords are skipped.** Copies that apps mark as concealed, such as those from password managers, are not saved.
 - **You stay in control.** Remove any clip from its card. To remove everything, quit Clipnpaste and delete its Application Support folder.
 
+## Download
+
+<p align="center">
+  <a href="https://github.com/irfanabdulhameed/clipnpaste/releases/latest/download/Clipnpaste.dmg"><img src="docs/images/download-button.svg" width="232" height="52" alt="Download Clipnpaste for Mac"></a>
+</p>
+
+<p align="center">Requires macOS 26 Tahoe or later. Free and open source. This is version 0.1.0, the first release.</p>
+
+**The first time you open it:**
+
+1. Open **Clipnpaste.dmg** and drag **Clipnpaste** onto **Applications**.
+2. Open Clipnpaste from Applications. Clipnpaste isn't notarized by Apple yet, so macOS says it can't check it. Click **Done** (or **OK**).
+3. Open **System Settings › Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the line about Clipnpaste. Confirm with your password or Touch ID, then click **Open**.
+4. Turn on **Accessibility** for Clipnpaste in **System Settings › Privacy & Security › Accessibility**, so it can paste for you. See [Permissions](#permissions).
+
+You only do this once. After that, the Clipnpaste icon sits in your menu bar and <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> opens the panel.
+
 ## Build from source
 
-No release has been published yet, so building from source is how you install Clipnpaste today. You need Apple's Command Line Tools. Xcode is not required, and there are no third-party dependencies.
+You can also build Clipnpaste yourself. You need Apple's Command Line Tools. Xcode is not required, and there are no third-party dependencies.
 
 **Requirements**
 
@@ -107,6 +129,7 @@ Other build options:
 ```bash
 INSTALL=0 ./scripts/build.sh                      # build only, don't install
 CLIPNPASTE_SIGN_ID="My Certificate" ./scripts/build.sh   # sign with your own certificate
+./scripts/make-dmg.sh                             # build dist/Clipnpaste.dmg, the file people download
 ./scripts/test.sh                                 # run the test suite
 ```
 
@@ -133,13 +156,13 @@ Without it, Clipnpaste still saves your history and puts the clip you pick on th
 Sources/ClipnpasteCore/   clipboard watcher, capture rules, SQLite store, thumbnails, layout (tested)
 Sources/Clipnpaste/       the app: menu bar, glass panel, cards, drag, shortcut, paster
 Tests/                    unit tests for the core
-scripts/                  build.sh, test.sh
+scripts/                  build.sh, make-dmg.sh, test.sh
 ```
 
 ## FAQ
 
 ### What is the best way to get a clipboard manager on Mac for free?
-Clipnpaste is free and open source under the MIT licence. Build it from source with the steps above.
+Clipnpaste is free and open source under the MIT licence. Download it from the [Download](#download) section or build it from source.
 
 ### How do I see my clipboard history on a Mac?
 Install Clipnpaste, copy as usual, then press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd>. Every text and image you copied appears as a card. Press <kbd>⌘</kbd><kbd>Y</kbd> to see all of it grouped by day.
