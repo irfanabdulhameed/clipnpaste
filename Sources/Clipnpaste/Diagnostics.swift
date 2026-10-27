@@ -15,8 +15,6 @@ enum DiagnosticFlags {
         return args.contains("--measure")
         #endif
     }()
-    /// `--slow-motion N`: every motion runs N times slower, for screenshots mid-rise.
-    static let slowMotion: Double? = value(after: "--slow-motion").flatMap(Double.init)
     /// `--pasteboard-banner`: shows the pasteboard banner as if access were set to ask.
     static let pasteboardBanner = args.contains("--pasteboard-banner")
     /// `--measure-cycles N`: open and close cycles in the measure scene (20).
@@ -89,11 +87,6 @@ final class Diagnostics: NSObject {
     var logRiseFrames = true
 
     var enabled: Bool { DiagnosticFlags.measure }
-
-    /// At launch: slow motion for screenshots.
-    func configure() {
-        if let s = DiagnosticFlags.slowMotion, s > 0 { MotionClock.shared.timeScale = s }
-    }
 
     func note(_ s: String) {
         FileHandle.standardError.write(Data("[Clipnpaste] measure: \(s)\n".utf8))

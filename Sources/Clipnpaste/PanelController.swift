@@ -132,7 +132,6 @@ final class PanelController {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.close() } })
 
-        Diagnostics.shared.configure()
         // One layout pass now, off screen, so the first open has nothing to build.
         applyDisplayOptions()
         layout(on: mouseScreen())

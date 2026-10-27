@@ -56,10 +56,12 @@ struct BannerDot: View {
             .onAppear {
                 guard !reduceMotion else { return }
                 let up = Motion.popUp, down = Motion.popDown
-                withAnimation(.timingCurve(up.x1, up.y1, up.x2, up.y2, duration: 0.06)) {
+                // SwiftUI runs this one, not the motion clock, so `--slow-motion` is applied here.
+                let k = DebugFlags.slowMotion
+                withAnimation(.timingCurve(up.x1, up.y1, up.x2, up.y2, duration: 0.06 * k)) {
                     scale = Motion.popPeak
                 } completion: {
-                    withAnimation(.timingCurve(down.x1, down.y1, down.x2, down.y2, duration: 0.14)) { scale = 1 }
+                    withAnimation(.timingCurve(down.x1, down.y1, down.x2, down.y2, duration: 0.14 * k)) { scale = 1 }
                 }
             }
     }
