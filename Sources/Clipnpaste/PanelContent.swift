@@ -106,6 +106,8 @@ final class CardCell: NSView {
     /// The motion inside the card's content (button pop and dip, thumbnail blur-in).
     let look = CardLook()
     private(set) var clipID: UUID?
+    /// A clip edited in Settings keeps its id, so the hash tells the cell to redraw.
+    private var clipHash: String?
     private let model: PanelModel
     private var blurFilter: CIFilter?
     private var lastBlur: Double = 0
@@ -127,13 +129,15 @@ final class CardCell: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     func show(_ clip: Clip) {
-        guard clipID != clip.id else { return }
+        guard clipID != clip.id || clipHash != clip.contentHash else { return }
         clipID = clip.id
+        clipHash = clip.contentHash
         host.rootView = CardCellContent(clip: clip, model: model, look: look)
     }
 
     func clear() {
         clipID = nil
+        clipHash = nil
         host.rootView = CardCellContent(clip: nil, model: model, look: look)
     }
 
