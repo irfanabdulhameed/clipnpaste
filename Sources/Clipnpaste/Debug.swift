@@ -29,6 +29,8 @@ enum DebugFlags {
     static let reduceMotion = args.contains("--reduce-motion")
     /// `--appearance light` or `--appearance dark` overrides the system appearance.
     static let appearance: String? = value(after: "--appearance")
+    /// `--slow-motion N` runs every animation N times slower, for screenshots of motion mid-flight.
+    static let slowMotion: Double = value(after: "--slow-motion").flatMap { Double($0) }.map { max($0, 1) } ?? 1
 
     private static func value(after flag: String) -> String? {
         args.firstIndex(of: flag).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil }

@@ -185,15 +185,9 @@ extension PanelController {
         check("the window fits the glass again", abs(panel.frame.height - CGFloat(PanelGeometry.inset + grid.height(rows: 3) + PanelGeometry.shadowRoom)) < 1,
               "window \(panel.frame.height)")
 
-        // ↑ and ↓ move between rows.
-        selectIndex(1)
-        key(kVK_DownArrow); check("↓ selects the card below (1 → \(1 + grid.columns))", model.selectedIndex == 1 + grid.columns)
-        key(kVK_DownArrow)
-        let third = min(1 + 2 * grid.columns, model.clips.count - 1)
-        let expect = model.clips.count > 2 * grid.columns ? third : 1 + grid.columns
-        check("↓ again (or stays on the last row)", model.selectedIndex == expect, "selected \(model.selectedIndex ?? -1)")
-        key(kVK_UpArrow); key(kVK_UpArrow)
-        check("↑ ×2 back to the top row", model.selectedIndex == 1)
+        // ↑ and ↓ move between rows. The expectations come from the grid itself, so they hold on any
+        // screen: with 8 columns the demo clips left by now fill only one row and a card.
+        await gridNavigationChecks { check($0, $1, $2) }
 
         resetProbe()
         let h3 = glass.h.v
@@ -326,6 +320,8 @@ extension PanelController {
         await settle()
         check("⌘Y leaves history, back to the row", model.mode == .row && rows == 1 && !content.topBar.pill.isHidden && !content.topBar.history.selected)
         noOvershoot("history exit", from: hHist, to: Double(grid.height(rows: 1)))
+        // Card motion: the sliding ring, pop and dip, remove, insert, thumbnail, copy, crispness.
+        await cardMotionChecks { check($0, $1, $2) }
         key(kVK_ANSI_Y, .command, "y"); await settle()
         key(kVK_Escape); await settle()
         check("Esc in history closes the panel", !isOpen)
@@ -335,6 +331,10 @@ extension PanelController {
         debugLog("self-test done: \(r.passed) passed, \(r.failed) failed")
         showToast(on: screen)
         debugLog("toast shown at \(toast.frame) on visible \(screen?.visibleFrame ?? .zero)")
+        // Unattended checks: the exit code is the verdict.
+        DemoExtras.cleanUp()
+        DragPasteboard.cleanUp()
+        exit(r.failed == 0 ? 0 : 1)
     }
 
     /// `--scene NAME`: holds the panel in one state for a screenshot.
@@ -385,7 +385,7 @@ extension PanelController {
                 await wait(16)
             }
         default:
-            debugLog("unknown scene \(name)")
+            if !(await showCardScene(name)) { debugLog("unknown scene \(name)") }
         }
         await wait(700)
         debugLog("scene \(name) ready: glass \(glassScreenRect), rows \(rows), mode \(model.mode), strip \(strip), drag \(drag != nil)")
