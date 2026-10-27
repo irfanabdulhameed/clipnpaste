@@ -49,7 +49,10 @@ final class MotionClock: NSObject {
     private var dirty: [ObjectIdentifier: MotionTarget] = [:]
     private var hooks: [Int: (Double) -> Void] = [:]
     private var nextHook = 0
-    private var lastTarget: CFTimeInterval = 0
+    /// When the frame being drawn reaches the screen (the display link's target time).
+    private(set) var lastTarget: CFTimeInterval = 0
+    /// `--slow-motion N` divides time by N (debug screenshots only); 1 otherwise.
+    var timeScale = 1.0
     private var inFrame = false
     private weak var screen: NSScreen?
 
@@ -111,7 +114,7 @@ final class MotionClock: NSObject {
     @objc private func tick(_ l: CADisplayLink) {
         inFrame = true
         let now = l.targetTimestamp
-        let dt = min(max(now - lastTarget, 0), 0.1)
+        let dt = min(max(now - lastTarget, 0), 0.1) / timeScale
         lastTarget = now
         for h in Array(hooks.values) { h(dt) }
         for a in Array(active.values) where !a.step(dt) {
