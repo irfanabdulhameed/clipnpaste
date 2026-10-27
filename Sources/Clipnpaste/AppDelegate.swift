@@ -25,11 +25,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment = env
         let panel = PanelController(store: env.store, watcher: env.watcher)
         self.panel = panel
-        // ⌃⌘V toggles the panel.
-        hotKey = HotKey(keyCode: UInt32(Paster.vKeyCode()), modifiers: UInt32(cmdKey | controlKey)) { [weak panel] in
-            panel?.toggle()
+        // A debug run (any check flag) takes no global shortcut and adds no menu bar icon, so an
+        // installed copy that is running keeps ⌃⌘V and nothing it shows changes.
+        if !DebugFlags.usesDemoStore {
+            // ⌃⌘V toggles the panel.
+            hotKey = HotKey(keyCode: UInt32(Paster.vKeyCode()), modifiers: UInt32(cmdKey | controlKey)) { [weak panel] in
+                panel?.toggle()
+            }
+            statusMenu = StatusMenu(panel: panel)
+        } else {
+            debugLog("debug run: in-memory store, no watcher, no hotkey, no menu bar icon")
         }
-        statusMenu = StatusMenu(panel: panel)
         if DebugFlags.showPanel || DebugFlags.selfTest {
             Task {
                 panel.open()
