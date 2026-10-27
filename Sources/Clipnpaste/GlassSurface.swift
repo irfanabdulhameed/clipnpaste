@@ -77,6 +77,17 @@ final class GlassSurface: NSView {
         updateColors()
     }
 
+    /// Where the sheet is drawn while it rises or leaves: `drop` points below its frame, at
+    /// `opacity`. A transform and an opacity on its own layer, so neither the view's frame nor
+    /// the window moves, and the glass is never filtered. At rest: identity and 1.
+    func present(drop: CGFloat, opacity: Double) {
+        guard let layer else { return }
+        let down: CGFloat = (layer.superlayer?.isGeometryFlipped ?? false) ? 1 : -1
+        let t = drop == 0 ? CATransform3DIdentity : CATransform3DMakeTranslation(0, down * drop, 0)
+        if !CATransform3DEqualToTransform(layer.transform, t) { layer.transform = t }
+        LayerLook.opacity(layer, opacity)
+    }
+
     private func rebuild() {
         materialView?.removeFromSuperview()
         content.removeFromSuperview()

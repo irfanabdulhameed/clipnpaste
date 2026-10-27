@@ -46,8 +46,14 @@ final class PanelController {
     let dragSource = DragSource()
     /// `--self-test`: records a paste instead of making one, so the clipboard is never touched.
     var pasteInterceptor: ((UUID) -> Void)?
+    /// `--self-test`: an intercepted paste still runs the exit, as a real one does.
+    var interceptedPasteCloses = false
 
-    private(set) var isOpen = false
+    /// Closed, opening, open or closing (see PanelMotion.swift).
+    var phase: PanelPhase = .closed
+    /// Opening or open: the panel takes keys and clicks. A closing panel is still on screen.
+    var isOpen: Bool { phase == .opening || phase == .open }
+    private(set) lazy var rise = RiseMotion(controller: self)
 
     struct Press {
         let id: UUID
@@ -68,7 +74,7 @@ final class PanelController {
         get { UserDefaults.standard.bool(forKey: Self.classicBlurKey) }
         set {
             UserDefaults.standard.set(newValue, forKey: Self.classicBlurKey)
-            applyDisplayOptions()
+            refreshDisplayOptions()
         }
     }
 
@@ -106,19 +112,21 @@ final class PanelController {
             self.historyScrolled()
         }
         model.onOpenSettings = { [unowned self] in
+            let pasteboard = !self.model.needsAccessibility && self.model.needsPasteboardAccess
             self.close()
-            Paster.openAccessibilitySettings()
+            if pasteboard { Self.openPasteboardSettings() } else { Paster.openAccessibilitySettings() }
         }
         dragSource.controller = self
         storeToken = store.addObserver { [weak self] _ in self?.storeChanged() }
 
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.applyDisplayOptions() } })
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.refreshDisplayOptions() } })
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.close() } })
 
+        Diagnostics.shared.configure()
         // One layout pass now, off screen, so the first open has nothing to build.
         applyDisplayOptions()
         layout(on: mouseScreen())
@@ -148,8 +156,10 @@ final class PanelController {
     func toggle() { isOpen ? close() : open() }
 
     func open() {
-        guard !isOpen else { return }
+        if phase == .closing { return reopenMidExit() }
+        guard phase == .closed else { return }
         let started = CACurrentMediaTime()
+        Diagnostics.shared.triggered()
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
         var marks: [(String, Double)] = []
@@ -171,6 +181,7 @@ final class PanelController {
         model.selectedID = model.clips.first?.id
         model.focus = .card
         model.needsAccessibility = !Paster.canPost
+        model.needsPasteboardAccess = Self.pasteboardAsks
         glass.h.set(targetHeight)
         glass.fade.set(1)
         glass.shift.set(0)
@@ -178,27 +189,16 @@ final class PanelController {
         fitWindow()
         updateChrome()
         MotionClock.shared.use(screen: screen)
+        // The from-state is drawn before the window shows, so its first frame starts the rise.
+        startRise()
         MotionClock.shared.flush()
         mark("cards placed")
 
-        isOpen = true
+        phase = .opening
         panel.ignoresMouseEvents = false
         panel.orderFrontRegardless()
-        // A self-test or scene run drives the panel with its own events: it never takes the
-        // keyboard, and clicks in other apps don't close it.
-        if !DebugFlags.drivesPanel {
-            panel.makeKey()
-            clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-                MainActor.assumeIsolated { self?.close() }
-            }
-        }
-        // Outside the glass the window lets clicks through to the apps below; this notices the
-        // pointer coming back over the glass.
-        if !DebugFlags.drivesPanel {
-            moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
-                MainActor.assumeIsolated { self?.pointerMovedElsewhere() }
-            }
-        }
+        Diagnostics.shared.orderedFront(on: screen)
+        takeInput()
         refreshHover()
         updatePassThrough()
         mark("ordered front")
@@ -207,9 +207,38 @@ final class PanelController {
         if DebugFlags.logGeometry { debugLog("open steps: " + marks.map { "\($0.0) \(String(format: "%.1f", $0.1))" }.joined(separator: ", ")) }
     }
 
+    /// The shortcut pressed while the panel leaves: it turns back from where it is.
+    private func reopenMidExit() {
+        Diagnostics.shared.triggered()
+        reaimOpen()
+        panel.ignoresMouseEvents = false
+        Diagnostics.shared.orderedFront(on: screen)
+        takeInput()
+        refreshHover()
+        updatePassThrough()
+    }
+
+    /// The keyboard and the global monitors, while the panel is open.
+    private func takeInput() {
+        // A self-test or scene run drives the panel with its own events: it never takes the
+        // keyboard, and clicks in other apps don't close it.
+        guard !DebugFlags.drivesPanel else { return }
+        panel.makeKey()
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.close() }
+        }
+        // Outside the glass the window lets clicks through to the apps below; this notices the
+        // pointer coming back over the glass.
+        moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pointerMovedElsewhere() }
+        }
+    }
+
+    /// Input stops at once; the panel then leaves on its exit motion and is ordered out when it
+    /// ends (`finishClose`). Clicks go through to the apps below while it leaves.
     func close() {
         guard isOpen else { return }
-        isOpen = false
+        phase = .closing
         for m in [clickMonitor, moveMonitor] { if let m { NSEvent.removeMonitor(m) } }
         clickMonitor = nil
         moveMonitor = nil
@@ -227,9 +256,25 @@ final class PanelController {
         press = nil
         model.setPressed(nil, nil)
         model.setHover(nil, nil)
+        panel.ignoresMouseEvents = true
+        NSCursor.arrow.set()
+        startExit()
+    }
+
+    /// The exit has ended: ordered out, and everything back at rest for the next open.
+    func finishClose() {
+        guard phase == .closing else { return }
+        phase = .closed
         panel.orderOut(nil)
         panel.ignoresMouseEvents = false
-        NSCursor.arrow.set()
+        rise.y.set(0)
+        rise.op.set(1)
+        for m in rise.blurred { m.blur.set(0) }
+        rise.blurred = []
+        content.emptyFx.reset()
+        // The banners flip in again, dot popping, on the next open.
+        model.needsAccessibility = false
+        model.needsPasteboardAccess = false
         // Next time it opens on the row or grid again, at its remembered height.
         history = HistoryState(token: history.token + 1)
         strip = .full
@@ -240,6 +285,20 @@ final class PanelController {
         reload(.instant)
         glass.h.set(targetHeight)
         MotionClock.shared.flush()
+        Diagnostics.shared.closed()
+    }
+
+    /// Pasteboard privacy set to ask or deny: the second banner.
+    static var pasteboardAsks: Bool {
+        if DiagnosticFlags.pasteboardBanner { return true }
+        let b = NSPasteboard.general.accessBehavior
+        return b == .ask || b == .alwaysDeny
+    }
+
+    static func openPasteboardSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Pasteboard") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func mouseScreen() -> NSScreen? {
@@ -260,6 +319,14 @@ final class PanelController {
         content.topBar.use(g)
         let f = windowFrame(glassHeight: Double(g.height))
         if panel.frame != f { panel.setFrame(f, display: false) }
+    }
+
+    /// A setting changed while the app runs. A new surface (Reduce Transparency's opaque one, or
+    /// classic blur) is drawn once off screen while closed, so the next rise keeps its frames.
+    private func refreshDisplayOptions() {
+        let before = surface.material
+        applyDisplayOptions()
+        if phase == .closed, surface.material != before { warmUp() }
     }
 
     func applyDisplayOptions() {
@@ -313,7 +380,10 @@ final class PanelController {
     // MARK: Events
 
     func route(_ event: NSEvent) -> NSEvent? {
-        guard isOpen else { return event }
+        guard isOpen else {
+            if phase == .closing, event.type == .keyDown { keyDuringExit(event); return nil }
+            return event
+        }
         if DebugFlags.traceEvents, [.leftMouseDown, .leftMouseDragged, .leftMouseUp].contains(event.type) {
             debugLog("event \(event.type.rawValue) at \(event.locationInWindow) press \(press != nil) drag \(drag != nil) pill \(pill != nil)")
         }
@@ -332,6 +402,7 @@ final class PanelController {
             return nil
         case .scrollWheel:
             guard strip == .full, pill == nil, drag == nil else { return nil }
+            Diagnostics.shared.scrolled()
             board.userScrolled()
             if model.mode == .row, let sideways = Self.wheelAsSideways(event) {
                 content.scrollView.scrollWheel(with: sideways)
@@ -342,6 +413,14 @@ final class PanelController {
         default:
             return event
         }
+    }
+
+    /// A key typed while the panel leaves belongs to the app below: the exit ends at once (which
+    /// hands the keyboard back) and the key is sent on to that app.
+    private func keyDuringExit(_ event: NSEvent) {
+        cutExit()
+        guard !DebugFlags.drivesPanel, Paster.canPost, let cg = event.cgEvent?.copy() else { return }
+        cg.post(tap: .cgSessionEventTap)
     }
 
     private func handleKey(_ e: NSEvent) {
@@ -693,6 +772,7 @@ final class PanelController {
         guard let clip = clip(id), isUsable(clip) else { return }
         if let intercept = pasteInterceptor {
             intercept(id)
+            if interceptedPasteCloses { close() }
             return
         }
         let started = CACurrentMediaTime()
@@ -723,6 +803,13 @@ final class PanelController {
             }
             // A beat for the app's window to take the keyboard back from the panel.
             try? await Task.sleep(for: .milliseconds(30))
+            // If the leaving panel kept the keyboard, the ⌘V would land in it: order it out now.
+            if let self, self.panel.isKeyWindow {
+                self.cutExit()
+                appLog("paste: the panel still had the keyboard; ordered out before ⌘V")
+                debugLog("paste: the panel still had the keyboard; ordered out before ⌘V")
+                try? await Task.sleep(for: .milliseconds(30))
+            }
             guard !Paster.secureInputOn else {
                 self?.showToast(on: screen)
                 return
