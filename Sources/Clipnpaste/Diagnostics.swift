@@ -541,9 +541,10 @@ extension PanelController {
             let ok = moving.count >= 4 && zip(moving, moving.dropFirst()).allSatisfy { $0.y <= $1.y }
             var faster = false
             if ok {
-                let a = moving[0], b = moving[1], c = moving[moving.count - 2], e = moving[moving.count - 1]
-                let v0 = (b.y - a.y) / max(b.t - a.t, 1e-3), v1 = (e.y - c.y) / max(e.t - c.t, 1e-3)
-                faster = v1 > 2 * v0
+                // Speed per frame; the last segment may be a partial frame (the exit ends between
+                // frames), so the end speed is the fastest of the last three.
+                let v = zip(moving, moving.dropFirst()).map { ($1.y - $0.y) / max($1.t - $0.t, 1e-3) }
+                faster = (v.suffix(3).max() ?? 0) > 2 * v[0]
             }
             check("paste: the exit only goes down, and accelerates away", ok && faster,
                   moving.map { String(format: "%.3f:%.1f", $0.t - (moving.first?.t ?? 0), $0.y) }.joined(separator: " "))
