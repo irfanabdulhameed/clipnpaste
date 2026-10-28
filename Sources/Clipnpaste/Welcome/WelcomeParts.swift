@@ -153,14 +153,14 @@ enum StageGeo {
         return onStage(CGPoint(x: o.x + cardW / 2, y: o.y + cardH / 2), panelH: h)
     }
 
-    /// The real card buttons, from CardView's header: trailing padding 6, 20 pt buttons 4 apart,
-    /// centred in the 26 pt header.
-    static let buttonSize: CGFloat = 20
+    /// The real card buttons, from CardView's header: trailing padding 6, 28 pt buttons 4 apart,
+    /// centred in the 34 pt header.
+    static let buttonSize: CGFloat = 28
     static func copyButton(in card: CGPoint) -> CGPoint {
-        CGPoint(x: card.x + cardW - 6 - buttonSize - 4 - buttonSize / 2, y: card.y + 13)
+        CGPoint(x: card.x + cardW - 6 - buttonSize - 4 - buttonSize / 2, y: card.y + 17)
     }
     static func removeButton(in card: CGPoint) -> CGPoint {
-        CGPoint(x: card.x + cardW - 6 - buttonSize / 2, y: card.y + 13)
+        CGPoint(x: card.x + cardW - 6 - buttonSize / 2, y: card.y + 17)
     }
 }
 

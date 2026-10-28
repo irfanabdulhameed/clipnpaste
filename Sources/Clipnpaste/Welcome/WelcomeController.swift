@@ -526,7 +526,6 @@ final class WelcomeProgressView: NSView, MotionTarget {
 final class PageFx: MotionTarget {
     let op: Anim, blur: Anim, x: Anim
     private weak var view: NSView?
-    private var filter: CIFilter?
 
     init(view: NSView) {
         self.view = view
@@ -565,7 +564,7 @@ final class PageFx: MotionTarget {
     func render() {
         guard let layer = view?.layer else { return }
         LayerLook.opacity(layer, op.v)
-        LayerLook.blur(layer, blur.v, filter: &filter)
+        LayerLook.blur(layer, blur.v)
         let t = abs(x.v) > 0.01 ? CATransform3DMakeTranslation(CGFloat(x.v), 0, 0) : CATransform3DIdentity
         if !CATransform3DEqualToTransform(layer.transform, t) { layer.transform = t }
     }
