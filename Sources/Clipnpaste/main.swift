@@ -1,5 +1,6 @@
 import AppKit
 
+UpdateDebug.writeVersionIfAsked()
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

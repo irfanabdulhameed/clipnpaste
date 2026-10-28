@@ -11,6 +11,7 @@ public final class Preferences {
         case openOn, showMenuBarIcon, showInDock
         case maxClips, maxImageBytes, autoClearDays, ignoredApps, captureUniversalClipboard
         case settingsSection, settingsFrame, welcomed
+        case checkForUpdates, lastUpdateCheck
     }
 
     public enum DragTilt: String, CaseIterable, Sendable { case speed, fixed45 = "45" }
@@ -62,6 +63,12 @@ public final class Preferences {
     /// Bundle ids whose copies are never kept, on top of the built-in password managers.
     public var ignoredApps: [String] = [] { didSet { put(ignoredApps, .ignoredApps) } }
     public var captureUniversalClipboard = true { didSet { put(captureUniversalClipboard, .captureUniversalClipboard) } }
+
+    // Updates
+    /// Settings › About › Check for updates automatically: at most once a day, silently.
+    public var checkForUpdates = true { didSet { put(checkForUpdates, .checkForUpdates) } }
+    /// When GitHub was last asked, by hand or by itself.
+    public var lastUpdateCheck: Date? { didSet { put(lastUpdateCheck?.timeIntervalSince1970, .lastUpdateCheck) } }
 
     // The Settings window itself
     public var settingsSection = "overview" { didSet { put(settingsSection, .settingsSection) } }
@@ -128,6 +135,8 @@ public final class Preferences {
         autoClearDays = number(.autoClearDays).map { max(Int($0), 0) } ?? 30
         ignoredApps = d.stringArray(forKey: Key.ignoredApps.rawValue) ?? []
         captureUniversalClipboard = flag(.captureUniversalClipboard, true)
+        checkForUpdates = flag(.checkForUpdates, true)
+        lastUpdateCheck = number(.lastUpdateCheck).map { Date(timeIntervalSince1970: $0) }
         settingsSection = d.string(forKey: Key.settingsSection.rawValue) ?? "overview"
         settingsFrame = d.string(forKey: Key.settingsFrame.rawValue)
         welcomed = flag(.welcomed, false)

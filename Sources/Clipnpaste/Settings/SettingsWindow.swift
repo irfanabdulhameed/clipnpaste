@@ -38,6 +38,7 @@ final class SettingsModel {
     let env: AppEnvironment
     let shortcuts: ShortcutController
     let recorder: ShortcutRecorderModel
+    let updater: Updater
     var prefs: Preferences { env.preferences }
 
     var section: SettingsSection {
@@ -48,9 +49,10 @@ final class SettingsModel {
     }
     @ObservationIgnored var onSection: ((SettingsSection) -> Void)?
 
-    init(env: AppEnvironment, shortcuts: ShortcutController) {
+    init(env: AppEnvironment, shortcuts: ShortcutController, updater: Updater) {
         self.env = env
         self.shortcuts = shortcuts
+        self.updater = updater
         recorder = ShortcutRecorderModel(shortcuts: shortcuts)
         section = SettingsSection(rawValue: env.preferences.settingsSection) ?? .overview
     }
@@ -70,8 +72,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { window.isVisible }
 
-    init(env: AppEnvironment, shortcuts: ShortcutController) {
-        model = SettingsModel(env: env, shortcuts: shortcuts)
+    init(env: AppEnvironment, shortcuts: ShortcutController, updater: Updater) {
+        model = SettingsModel(env: env, shortcuts: shortcuts, updater: updater)
         let host = NSHostingController(rootView: SettingsView(model: model))
         host.sizingOptions = []
         // The toolbar comes from SwiftUI; the title stays "Clipnpaste Settings", with the section under it.

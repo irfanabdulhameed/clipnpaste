@@ -27,8 +27,10 @@ enum DebugFlags {
     static let showSettings: String? = value(after: "--show-settings")
     /// Any flag that must not touch the real history or clipboard.
     static var usesDemoStore: Bool {
-        selfTest || showPanel || demoExtra || demoStates || empty || scene != nil || showSettings != nil
+        selfTest || showPanel || demoExtra || demoStates || empty || scene != nil || showSettings != nil || updateDebug
     }
+    /// Any updater check flag (see UpdateDebug).
+    static let updateDebug = args.contains("--update-state") || args.contains("--fake-update") || args.contains("--update-check")
     static let reduceTransparency = args.contains("--reduce-transparency")
     static let increaseContrast = args.contains("--increase-contrast")
     static let reduceMotion = args.contains("--reduce-motion")

@@ -58,6 +58,10 @@ final class PanelController {
     var phase: PanelPhase = .closed
     /// Opening or open: the panel takes keys and clicks. A closing panel is still on screen.
     var isOpen: Bool { phase == .opening || phase == .open }
+    /// When the last paste was picked; an update waits a moment after it so the ⌘V lands first.
+    var lastPasteAt: CFTimeInterval = 0
+    /// Closed and still, no drag, no paste in the last 3 s: an update may replace the app now.
+    var isIdleForUpdate: Bool { phase == .closed && drag == nil && CACurrentMediaTime() - lastPasteAt > 3 }
     private(set) lazy var rise = RiseMotion(controller: self)
 
     struct Press {
@@ -811,6 +815,7 @@ final class PanelController {
             return
         }
         let started = CACurrentMediaTime()
+        lastPasteAt = started
         let target = previousApp
         let screen = self.screen
         close()

@@ -32,7 +32,7 @@ struct SettingsView: View {
         case .panel: PanelSection(prefs: model.prefs)
         case .motion: MotionSection(prefs: model.prefs)
         case .privacy: PrivacySection(env: model.env)
-        case .about: AboutSection()
+        case .about: AboutSection(updater: model.updater)
         }
     }
 }

@@ -10,9 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenu: StatusMenu?
     private var settings: SettingsWindowController?
     private var appMenu: AppMenu?
+    private var updater: Updater?
     private let prefs = Preferences.app
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if UpdateDebug.runIfAsked() { return }
         applyAppearance()
         let env: AppEnvironment
         do {
@@ -33,7 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.shortcuts = shortcuts
         shortcuts.start()
-        let settings = SettingsWindowController(env: env, shortcuts: shortcuts)
+        let updater = Updater(prefs: prefs)
+        // Never in the middle of a paste or a drag.
+        updater.isIdle = { [weak panel] in panel?.isIdleForUpdate ?? true }
+        self.updater = updater
+        let settings = SettingsWindowController(env: env, shortcuts: shortcuts, updater: updater)
         self.settings = settings
         panel.onOpenSettings = { [weak self] in self?.showSettings() }
         appMenu = AppMenu(openSettings: { [weak self] in self?.showSettings() },
@@ -42,12 +48,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !DebugFlags.usesDemoStore {
             let menu = StatusMenu(panel: panel, shortcuts: shortcuts)
             menu.onOpenSettings = { [weak self] in self?.showSettings() }
+            menu.onCheckForUpdates = { [weak self] in
+                self?.showSettings(.about)
+                self?.updater?.check()
+            }
+            menu.onShowUpdate = { [weak self] in self?.showSettings(.about) }
+            updater.onPendingChange = { [weak menu] in menu?.pendingUpdate = $0?.version }
+            menu.pendingUpdate = updater.pending?.version
             menu.isVisible = prefs.showMenuBarIcon
             statusMenu = menu
         } else {
             debugLog("debug run: in-memory store, no watcher, no hotkey, no menu bar icon")
         }
         applyDock()
+        // Automatic checks only in the real app (or a --fake-update check), never in other debug runs.
+        if !DebugFlags.usesDemoStore || UpdateDebug.fakeDMG != nil { updater.start() }
         prefs.observe { [weak self] key in
             guard let self else { return }
             switch key {

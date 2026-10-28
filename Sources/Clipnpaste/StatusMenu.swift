@@ -13,8 +13,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let accessibilityItem = NSMenuItem(title: "", action: #selector(openAccessibility), keyEquivalent: "")
     private let classicItem = NSMenuItem(title: "Use classic blur", action: #selector(toggleClassicBlur), keyEquivalent: "")
     private let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+    private let updateItem = NSMenuItem(title: "", action: #selector(showUpdate), keyEquivalent: "")
+    private let updateSeparator = NSMenuItem.separator()
+    private let checkItem = NSMenuItem(title: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     /// Opens the Settings window.
     var onOpenSettings: (() -> Void)?
+    /// Opens Settings › About and checks.
+    var onCheckForUpdates: (() -> Void)?
+    /// Opens Settings › About on the update found.
+    var onShowUpdate: (() -> Void)?
+    /// A newer version an automatic check found: the menu shows "Update to X…" at the top.
+    var pendingUpdate: SemanticVersion? {
+        didSet { refresh() }
+    }
     /// Settings › General › Show menu-bar icon.
     var isVisible: Bool {
         get { item.isVisible }
@@ -30,11 +41,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         super.init()
         item.button?.image = MenuBarGlyph.image()
         accessibilityItem.toolTip = "Open Accessibility in System Settings"
-        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem, settingsItem] { i.target = self }
+        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem, settingsItem, updateItem, checkItem] {
+            i.target = self
+        }
+        updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
 
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
+        menu.addItem(updateItem)
+        menu.addItem(updateSeparator)
         menu.addItem(openItem)
         menu.addItem(.separator())
         menu.addItem(shortcutItem)
@@ -43,6 +59,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(accessibilityItem)
         menu.addItem(classicItem)
         menu.addItem(.separator())
+        menu.addItem(checkItem)
         menu.addItem(settingsItem)
         menu.addItem(withTitle: "Quit Clipnpaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
@@ -59,6 +76,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
 
     private func refresh() {
+        updateItem.isHidden = pendingUpdate == nil
+        updateSeparator.isHidden = pendingUpdate == nil
+        if let pendingUpdate { updateItem.title = "Update to \(pendingUpdate)…" }
         shortcutItem.title = "Shortcut…  \(shortcuts.label)"
         switch LaunchAtLogin.status {
         case .enabled:
@@ -90,6 +110,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func toggleClassicBlur() { panel.useClassicBlur.toggle() }
     @objc private func openLoginSettings() { LaunchAtLogin.openSettings() }
     @objc private func openSettings() { onOpenSettings?() }
+    @objc private func checkForUpdates() { onCheckForUpdates?() }
+    @objc private func showUpdate() { onShowUpdate?() }
 
     @objc private func toggleLogin() {
         loginError = nil
