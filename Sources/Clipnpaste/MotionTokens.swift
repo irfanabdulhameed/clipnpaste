@@ -24,12 +24,13 @@ enum Motion {
     /// over the rise instead of switching on. 5% by 25 ms, 58% by 100 ms, 95% by 250 ms.
     static let materialise = CubicBezier(0.25, 0, 0.1, 1)
     static let materialiseMs = 360.0
-    /// The cards coming into focus on open: blur 20 → 0 that keeps easing to the end, so the
-    /// last pixels of blur resolve visibly instead of snapping. 13.3 px left at 100 ms, 2.0 at 250.
-    static let focus = CubicBezier(0.3, 0, 0.2, 1)
-    static let focusMs = 400.0
+    /// The cards coming into focus on open: blur 20 → 0 on an ease-out with a long, soft tail,
+    /// so the last pixels of blur resolve visibly instead of snapping. 11.9 px left at 100 ms,
+    /// 5.4 at 200, 2.4 at 300, 0.9 at 400, 0.2 at 500, 0 at 600. Scale and rise travel with it.
+    static let focus = CubicBezier(0.2, 0, 0, 1)
+    static let focusMs = 600.0
     /// The cards' opacity follows their focus, ahead of it, so they show while still soft.
-    static let focusFadeMs = 260.0
+    static let focusFadeMs = 300.0
     /// The glass starts this small and grows to 1 with its opacity.
     static let materialiseScale = 0.98
     static let linear = CubicBezier.linear

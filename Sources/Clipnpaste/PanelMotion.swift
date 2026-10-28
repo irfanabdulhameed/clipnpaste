@@ -87,18 +87,42 @@ final class Fx: MotionTarget {
 /// Layer helpers shared by the panel, the empty state and the toast.
 @MainActor
 enum LayerLook {
+    /// The name the blur filter goes by on a layer, so its radius has a key path.
+    static let blurName = "blur"
+
     /// A Gaussian blur of `px` points (the prototype's CSS blur), or no filter at all at 0, so
-    /// everything at rest is pixel-crisp. Same scale as the cards' blur.
-    static func blur(_ layer: CALayer?, _ px: Double, filter: inout CIFilter?) {
+    /// everything at rest is pixel-crisp. Same scale everywhere: the CI radius is `px / 2`.
+    ///
+    /// A layer's filters reach the screen only when they are set: changing a CIFilter object that
+    /// is already on the layer, or setting the same object again, is never drawn (the blur held
+    /// its first radius, then snapped sharp when the filter went). So the filter is put on once,
+    /// by name, and every later radius goes through the layer's `filters.blur.inputRadius` key
+    /// path, which is drawn on the frame it is set. The filter comes off only at ≤ 0.05 pt.
+    static func blur(_ layer: CALayer?, _ px: Double) {
         guard let layer else { return }
         if px <= 0.05 {
             if layer.filters != nil { layer.filters = nil }
             return
         }
-        let f = filter ?? CIFilter(name: "CIGaussianBlur")!
-        f.setValue(px / 2, forKey: kCIInputRadiusKey)
-        filter = f
-        layer.filters = [f]
+        let r = px / 2
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let f = layer.filters?.first as? CIFilter, f.name == blurName, layer.filters?.count == 1 {
+            layer.setValue(r, forKeyPath: "filters.\(blurName).inputRadius")
+        } else {
+            let f = CIFilter(name: "CIGaussianBlur")!
+            f.name = blurName
+            f.setValue(r, forKey: kCIInputRadiusKey)
+            layer.filters = [f]
+        }
+        CATransaction.commit()
+    }
+
+    /// The blur radius the layer is drawing now (CSS points), 0 without a filter.
+    static func drawnBlur(_ layer: CALayer?) -> Double {
+        guard let l = layer?.presentation() ?? layer, l.filters?.isEmpty == false,
+              let r = l.value(forKeyPath: "filters.\(blurName).inputRadius") as? Double else { return 0 }
+        return r * 2
     }
 
     /// Scales a view's layer about the view's centre (AppKit anchors view layers at a corner).
@@ -147,7 +171,7 @@ extension PanelController {
     }
 
     /// Cards in view, in reading order, each coming into focus: 20 → 0 pt blur, 1.06 → 1, 16 pt
-    /// rise on `focus` over 400 ms, opacity over 260 ms, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
+    /// rise on `focus` over 600 ms, opacity over 300 ms, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
     /// entrance is Together. The selection ring rides its card.
     private func entrance() {
         let stagger = prefs.entrance == .stagger ? 12.0 : 0
