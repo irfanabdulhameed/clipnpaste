@@ -64,13 +64,7 @@ extension PanelController {
         let fade = min(max(glass.fade.v, 0), 1)
         if let layer = content.cardsArea.layer {
             layer.opacity = Float(fade)
-            if fade < 0.995 {
-                let blur = CIFilter(name: "CIGaussianBlur")!
-                blur.setValue((1 - fade) * 10 / 2, forKey: kCIInputRadiusKey)
-                layer.filters = [blur]
-            } else if layer.filters != nil {
-                layer.filters = nil
-            }
+            LayerLook.blur(layer, fade < 0.995 ? (1 - fade) * 10 : 0)
         }
         content.topBar.setSidesOpacity(fade)
         content.topBar.pill.shiftY = CGFloat(glass.shift.v * 8)

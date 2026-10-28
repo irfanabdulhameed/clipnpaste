@@ -338,9 +338,10 @@ extension PanelController {
                 let cards = cardsInView()
                 hook = MotionClock.shared.addHook { [unowned self] _ in
                     let t = (MotionClock.shared.lastTarget - d.riseStart) * 1000
-                    d.note(String(format: "open +%5.1f ms: glass op %.3f scale %.4f y %6.1f | card 1 blur %5.2f op %.3f | card %d blur %5.2f",
+                    d.note(String(format: "open +%5.1f ms: glass op %.3f scale %.4f y %6.1f | card 1 blur %5.2f drawn %5.2f op %.3f | card %d blur %5.2f",
                                   t, self.rise.op.v, self.rise.scale.v, self.rise.y.v,
-                                  cards.first?.blur.v ?? 0, cards.first?.op.v ?? 0, cards.count, cards.last?.blur.v ?? 0))
+                                  cards.first?.blur.v ?? 0, LayerLook.drawnBlur(cards.first?.cell?.layer),
+                                  cards.first?.op.v ?? 0, cards.count, cards.last?.blur.v ?? 0))
                 }
             }
             await until { phase == .open }
@@ -474,6 +475,11 @@ extension PanelController {
                       rise.op.v > 0.05 && rise.op.v < 0.8, "")
                 check("\(label): at 90 ms the first card is still soft (blur \(f(blurs.first ?? 0)) > 12 px)",
                       (blurs.first ?? 20) > 12, "")
+                // What the layer draws, read back through the filter's key path: a radius set any
+                // other way never reaches the screen (the blur held, then snapped sharp).
+                let drawn = LayerLook.drawnBlur(cards.first?.cell?.layer)
+                check("\(label): at 90 ms the first card's layer draws its blur (\(f(drawn)) px, eased by key path)",
+                      drawn > 12 && drawn < 20, "")
                 check("\(label): cards enter 12 ms apart (blur rises with the card's place)",
                       blurs.count < 2 || (zip(blurs, blurs.dropFirst()).allSatisfy { $0 <= $1 + 1e-9 } && blurs[0] < blurs[blurs.count - 1]),
                       blurs.map(f).joined(separator: " "))

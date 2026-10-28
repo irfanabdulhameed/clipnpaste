@@ -20,9 +20,8 @@ final class PanelContentView: NSView {
     private(set) lazy var emptyFx = Fx { [unowned self] fx in
         LayerLook.opacity(self.emptyHost.layer, fx.op.v)
         LayerLook.scale(self.emptyHost, fx.scale.v)
-        LayerLook.blur(self.emptyHost.layer, fx.blur.v, filter: &self.emptyBlur)
+        LayerLook.blur(self.emptyHost.layer, fx.blur.v)
     }
-    private var emptyBlur: CIFilter?
 
     init(model: PanelModel) {
         topBar = TopBarView(model: model)
@@ -109,7 +108,6 @@ final class CardCell: NSView {
     /// A clip edited in Settings keeps its id, so the hash tells the cell to redraw.
     private var clipHash: String?
     private let model: PanelModel
-    private var blurFilter: CIFilter?
     private var lastBlur: Double = 0
 
     init(model: PanelModel) {
@@ -156,15 +154,8 @@ final class CardCell: NSView {
     private func setBlur(_ r: Double) {
         guard abs(r - lastBlur) > 0.01 || (r <= 0.05) != (lastBlur <= 0.05) else { return }
         lastBlur = r
-        if r <= 0.05 {
-            // Every blur ends at exactly 0 and the filter goes, so cards at rest are pixel-crisp.
-            if layer?.filters != nil { layer?.filters = nil }
-            return
-        }
-        let f = blurFilter ?? CIFilter(name: "CIGaussianBlur")!
-        f.setValue(r / 2, forKey: kCIInputRadiusKey)
-        blurFilter = f
-        layer?.filters = [f]
+        // Every blur ends at exactly 0 and the filter goes, so cards at rest are pixel-crisp.
+        LayerLook.blur(layer, r)
     }
 
     static func scale(_ s: Double, about c: CGPoint, anchor: CGPoint, size: CGSize) -> CATransform3D {
@@ -194,7 +185,6 @@ struct CardCellContent: View {
 @MainActor
 final class DayHeaderView: NSView {
     let label = NSTextField(labelWithString: "")
-    private var blurFilter: CIFilter?
 
     init() {
         super.init(frame: .zero)
@@ -222,14 +212,7 @@ final class DayHeaderView: NSView {
         let size = label.intrinsicContentSize
         label.frame = NSRect(x: 0, y: ((h - size.height) / 2).rounded(), width: width, height: size.height)
         layer?.opacity = Float(min(max(opacity, 0), 1))
-        if blur <= 0.05 {
-            if layer?.filters != nil { layer?.filters = nil }
-        } else {
-            let f = blurFilter ?? CIFilter(name: "CIGaussianBlur")!
-            f.setValue(blur / 2, forKey: kCIInputRadiusKey)
-            blurFilter = f
-            layer?.filters = [f]
-        }
+        LayerLook.blur(layer, blur)
     }
 }
 

@@ -22,7 +22,6 @@ final class Toast {
     private let hosting: NSHostingView<ToastView>
     private let surface: GlassSurface
     private var hideTask: Task<Void, Never>?
-    private var textBlur: CIFilter?
     private(set) lazy var fx = Fx { [unowned self] fx in self.render(fx) }
     /// Shown, or leaving; false once ordered out.
     private(set) var isShown = false
@@ -109,7 +108,7 @@ final class Toast {
     private func render(_ fx: Fx) {
         LayerLook.opacity(surface.layer, fx.op.v)
         LayerLook.scale(surface, fx.scale.v)
-        LayerLook.blur(hosting.layer, fx.blur.v, filter: &textBlur)
+        LayerLook.blur(hosting.layer, fx.blur.v)
     }
 }
 

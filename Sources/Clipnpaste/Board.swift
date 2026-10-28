@@ -82,7 +82,6 @@ final class RingMotion: MotionTarget {
 /// Draws the ring: a layer border, so it costs nothing at rest.
 @MainActor
 final class RingView: NSView {
-    private var blurFilter: CIFilter?
     private var lastBlur: Double = 0
     private var lineWidth: CGFloat = -1
 
@@ -137,14 +136,7 @@ final class RingView: NSView {
     private func setBlur(_ r: Double) {
         guard abs(r - lastBlur) > 0.01 || (r <= 0.05) != (lastBlur <= 0.05) else { return }
         lastBlur = r
-        if r <= 0.05 {
-            if layer?.filters != nil { layer?.filters = nil }
-            return
-        }
-        let f = blurFilter ?? CIFilter(name: "CIGaussianBlur")!
-        f.setValue(r / 2, forKey: kCIInputRadiusKey)
-        blurFilter = f
-        layer?.filters = [f]
+        LayerLook.blur(layer, r)
     }
 }
 
