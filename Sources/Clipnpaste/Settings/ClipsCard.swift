@@ -104,14 +104,14 @@ struct ClipsCard: View {
         }
     }
 
-    /// The copy and remove buttons sit in the 26 pt header, 6 pt from the right, 4 pt apart, 20 pt
+    /// The copy and remove buttons sit in the 34 pt header, 6 pt from the right, 4 pt apart, 28 pt
     /// round. The hit areas are 2 pt larger all round.
     static func button(at p: CGPoint, shown: Bool) -> CardButton? {
         guard shown else { return nil }
         let w = CGFloat(ClipsModel.geometry.cardWidth)
-        guard p.y >= 1, p.y <= 25 else { return nil }
-        let removeX = w - 6 - 20, copyX = removeX - 4 - 20
-        if p.x >= removeX - 2, p.x <= removeX + 22 { return .remove }
+        guard p.y >= 1, p.y <= 33 else { return nil }
+        let removeX = w - 6 - 28, copyX = removeX - 4 - 28
+        if p.x >= removeX - 2, p.x <= removeX + 30 { return .remove }
         if p.x >= copyX - 2, p.x < removeX - 2 { return .copy }
         return nil
     }

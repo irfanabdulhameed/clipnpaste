@@ -12,7 +12,7 @@ struct PanelGeometry: Equatable {
     static let scrollTop = 22
     static let contentTop = CardLayout.topBar - scrollTop
     static let cardRadius: CGFloat = 12
-    static let header = 26
+    static let header = 34
     static let footer = 20
     static let lineHeight = 16
 

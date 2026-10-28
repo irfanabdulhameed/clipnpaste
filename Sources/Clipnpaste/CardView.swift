@@ -114,7 +114,7 @@ struct CardView: View {
     }
 }
 
-/// The 20 pt round copy and remove buttons. Hover flips the fill and pops 1.08; a press dips to
+/// The 28 pt round copy and remove buttons. Hover flips the fill and pops 1.08; a press dips to
 /// 0.92 and holds (under Reduce Motion it darkens instead). The scale comes from the card's look.
 struct CardButtonView: View {
     let symbol: String
@@ -134,13 +134,13 @@ struct CardButtonView: View {
         ZStack {
             Circle().fill(fill)
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(lit ? theme.label : theme.label2)
                 .contentTransition(.identity)
         }
-        .frame(width: 20, height: 20)
+        .frame(width: 28, height: 28)
         .background {
-            if focused { Circle().strokeBorder(theme.accentRing, lineWidth: 3).frame(width: 26, height: 26) }
+            if focused { Circle().strokeBorder(theme.accentRing, lineWidth: 3).frame(width: 34, height: 34) }
         }
         .scaleEffect(look?.scale(button) ?? 1)
         .opacity(disabled ? 0.45 : 1)
