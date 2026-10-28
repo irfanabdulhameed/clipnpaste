@@ -46,7 +46,7 @@ It is made for one job: **paste previous clipboard items on a Mac** quickly, wit
 - **A Liquid Glass panel.** It rises from the bottom of the screen, is 1/6 of the screen tall and shows eight landscape cards in a row.
 - **Paste straight into the app you were in.** Move with the arrow keys and press <kbd>Return</kbd>, or click a card.
 - **Your own shortcut.** <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> by default. Record a different one from the menu bar icon.
-- **Copy and remove buttons on every card.** Copy a clip again without pasting it, or delete it for good.
+- **Copy and remove buttons on every card.** Copy a clip again without pasting it, or delete it for good (<kbd>⌘</kbd><kbd>⌫</kbd> removes the selected one).
 - **Reorder by dragging.** Drag a card sideways and the others move aside to open a slot.
 - **Drag a card out into any app.** Drop an image into Finder or Mail, or text into a text field. While you drag, the panel shrinks to a thin strip so it stays out of the way, then grows back.
 - **Up to three rows.** Drag the pill at the top of the panel to make it one, two or three rows tall. After that it scrolls.
@@ -76,6 +76,7 @@ It is made for one job: **paste previous clipboard items on a Mac** quickly, wit
 | <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> | Open the panel from anywhere (you can record your own) |
 | <kbd>←</kbd> <kbd>→</kbd> | Move the selection between cards |
 | <kbd>Return</kbd> | Paste the selected clip into the app you were in |
+| <kbd>⌘</kbd><kbd>⌫</kbd> | Remove the selected clip |
 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>←</kbd> / <kbd>→</kbd> | Move the selected card one place left or right |
 | <kbd>⌘</kbd><kbd>Y</kbd> | Switch between the card row and history by day |
 | <kbd>Esc</kbd> | Close the panel |

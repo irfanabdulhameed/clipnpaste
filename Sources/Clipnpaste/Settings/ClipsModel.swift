@@ -499,7 +499,8 @@ final class ClipsModel {
             loadAll()
             return (true, moveCursor(toIndex: clips.count - 1, extend: shift))
         case .delete, .deleteForward:
-            guard !selection.isEmpty else { return (false, nil) }
+            // ⌘⌫ only; a plain Delete is left alone.
+            guard command, !selection.isEmpty else { return (false, nil) }
             deleteSelected()
             return (true, cursor)
         case .return:
