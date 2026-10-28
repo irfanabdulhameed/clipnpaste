@@ -308,8 +308,10 @@ enum ClipsSelfCheck {
         model.click(ids[1], command: false, shift: false)
         model.click(ids[2], command: true, shift: false)
         model.click(ids[5], command: true, shift: false)
-        let handled = model.handleKey(.delete, modifiers: []).handled
-        check("Delete removes the selection", handled && store.count == 301 && [ids[1], ids[2], ids[5]].allSatisfy { model.clip($0) == nil },
+        let plain = model.handleKey(.delete, modifiers: []).handled
+        check("plain Delete removes nothing", !plain && store.count == 304, "\(store.count)")
+        let handled = model.handleKey(.delete, modifiers: .command).handled
+        check("⌘⌫ removes the selection", handled && store.count == 301 && [ids[1], ids[2], ids[5]].allSatisfy { model.clip($0) == nil },
               "\(store.count)")
         check("selection moves to the next card", model.selection == [ids[3]], "\(model.selection)")
 

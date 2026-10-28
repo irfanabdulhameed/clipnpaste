@@ -336,7 +336,7 @@ extension PanelController {
         ring.probe = { ringXs.append(Double($0.x)) }
         let goneMotion = board.motions[rid]
         let count1 = store.count
-        d.key(kVK_Delete)
+        d.key(kVK_Delete, .command)
         let neighbourAtOnce = Double(board.currentRect(nid)?.minX ?? -1)
         let leavingAtOnce = board.leaving.count
         await d.settle()
@@ -344,17 +344,17 @@ extension PanelController {
         debugLog("motion: remove card 2: leaving card blur peak \(fmt(goneBlur)), scale low \(fmt(goneScale)), last opacity \(fmt(goneLast)); neighbour moved while it still showed \(together); ring drift while the neighbour slid in \(fmt(ringDrift)) pt; neighbour pop \(fmt(nPop))")
         let goneClean = goneMotion?.gone == true && goneMotion?.cell == nil && board.leaving.isEmpty
         if rm {
-            check("Reduce Motion: Delete fades the card out (0.12 s) and the neighbours jump into the gap",
+            check("Reduce Motion: ⌘⌫ fades the card out (0.12 s) and the neighbours jump into the gap",
                   leavingAtOnce == 1 && neighbourAtOnce == gap && goneBlur == 0 && goneScale == 1 && goneLast == 0 && goneClean,
                   "leaving \(leavingAtOnce), neighbour at \(neighbourAtOnce), blur \(goneBlur), scale \(goneScale)")
         } else {
-            check("Delete: the card accelerates away (fade, 0.92, 8 px blur on leave) and is put away",
+            check("⌘⌫: the card accelerates away (fade, 0.92, 8 px blur on leave) and is put away",
                   leavingAtOnce == 1 && abs(goneBlur - 8) < 0.001 && abs(goneScale - 0.92) < 0.001 && goneLast == 0 && goneClean,
                   "leaving \(leavingAtOnce), blur \(goneBlur), scale \(goneScale), last opacity \(goneLast), clean \(goneClean)")
-            check("Delete: the neighbours close the gap from the same moment, so it never sits empty",
+            check("⌘⌫: the neighbours close the gap from the same moment, so it never sits empty",
                   together && neighbourAtOnce == nStart, "together \(together), neighbour started at \(neighbourAtOnce)")
         }
-        check("Delete: the neighbour is selected and pops, and the ring holds still as it slides in",
+        check("⌘⌫: the neighbour is selected and pops, and the ring holds still as it slides in",
               store.count == count1 - 1 && model.selectedID == nid && Double(board.currentRect(nid)?.minX ?? -1) == gap
                   && (rm ? nPop == 1 : abs(nPop - Motion.popPeak) < 0.001) && ringDrift < 0.5,
               "selected \(model.selectedIndex ?? -1), at \(board.currentRect(nid)?.minX ?? -1), pop \(nPop), ring drift \(fmt(ringDrift))")
@@ -370,9 +370,9 @@ extension PanelController {
         await d.settle()
         let wrapID = model.clips[cols].id
         let slot = rest(cols - 1).origin
-        d.key(kVK_Delete)
+        d.key(kVK_Delete, .command)
         await d.settle()
-        check("2-row grid: Delete on the last card of row 1 pulls row 2's first card up into its slot, selected",
+        check("2-row grid: ⌘⌫ on the last card of row 1 pulls row 2's first card up into its slot, selected",
               rows == 2 && model.selectedID == wrapID && board.currentRect(wrapID)?.origin == slot && board.leaving.isEmpty,
               "rows \(rows), selected \(model.selectedIndex ?? -1), at \(board.currentRect(wrapID)?.origin ?? .zero), slot \(slot)")
         d.key(kVK_DownArrow, .option)
@@ -506,7 +506,7 @@ extension PanelController {
             copyInterceptor = { _ in }
             d.key(kVK_ANSI_C, .command, "c")
         case "card-remove":
-            d.key(kVK_Delete)
+            d.key(kVK_Delete, .command)
         case "card-insert":
             _ = d.insertText("Copied while the panel was open.")
         case "card-remove-end":
@@ -514,7 +514,7 @@ extension PanelController {
             await d.settle()
             let before = board.viewport.minX
             var seen: [CGFloat] = []
-            d.key(kVK_Delete)
+            d.key(kVK_Delete, .command)
             for _ in 0..<40 {
                 await d.frames(1)
                 seen.append(board.viewport.minX)

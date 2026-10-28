@@ -95,7 +95,9 @@ extension PanelController {
         key(kVK_Return); await settle()
         check("Return on Remove removes it", model.clips.count == count - 1 && model.selectedIndex == 1 && model.focus == .card)
         key(kVK_Delete); await settle()
-        check("Delete removes the selected card", model.clips.count == count - 2 && model.selectedIndex == 1)
+        check("plain Delete removes nothing", model.clips.count == count - 1 && model.selectedIndex == 1)
+        key(kVK_Delete, .command); await settle()
+        check("⌘⌫ removes the selected card", model.clips.count == count - 2 && model.selectedIndex == 1)
         if let cg = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0, wheel3: 0),
            let wheel = NSEvent(cgEvent: cg) {
             _ = route(wheel)
@@ -104,7 +106,7 @@ extension PanelController {
         }
         board.scroll(to: .zero, instant: true); await settle()
         let removePoint = NSPoint(x: surface.frame.minX + CGFloat(g.sidePadding + g.cardWidth - 16),
-                                  y: surface.frame.maxY - CGFloat(g.cardTop + 13))
+                                  y: surface.frame.maxY - CGFloat(g.cardTop + 17))
         click(removePoint); await settle()
         check("a click on card 0's Remove removes it", model.clips.count == count - 3)
         count = model.clips.count

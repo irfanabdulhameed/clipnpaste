@@ -487,7 +487,8 @@ final class PanelController {
         case kVK_Tab:
             cycleFocus(flags.contains(.shift) ? -1 : 1)
         case kVK_Delete, kVK_ForwardDelete:
-            if let id = model.selectedID { remove(id) }
+            // Only ⌘⌫ removes; a plain Delete does nothing here.
+            if cmd, !ctrl, !opt, !e.isARepeat, let id = model.selectedID { remove(id) }
         default:
             let key = e.charactersIgnoringModifiers?.lowercased()
             if cmd, !ctrl, !opt, key == ",", !e.isARepeat {
@@ -630,11 +631,11 @@ final class PanelController {
         guard sy >= 0, !model.clips.isEmpty else { return .panel }
         let v = board.viewport
         guard let (id, l) = board.card(at: CGPoint(x: x + v.minX, y: sy + v.minY)) else { return .panel }
-        // 20 pt buttons, 6 pt from the right edge and 4 pt apart, centred in the 26 pt header.
-        if l.y >= 3, l.y < 23 {
+        // 28 pt buttons, 6 pt from the right edge and 4 pt apart, centred in the 34 pt header.
+        if l.y >= 3, l.y < 31 {
             let right = CGFloat(model.geometry.cardWidth - 6)
-            if l.x >= right - 20, l.x < right { return .button(id, .remove) }
-            if l.x >= right - 44, l.x < right - 24 { return .button(id, .copy) }
+            if l.x >= right - 28, l.x < right { return .button(id, .remove) }
+            if l.x >= right - 60, l.x < right - 32 { return .button(id, .copy) }
         }
         return .card(id)
     }
