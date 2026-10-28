@@ -24,7 +24,7 @@ Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V
 
 <br><br>
 
-<img src="docs/screenshots/hero.gif" width="880" alt="Animation: a Mac desktop with a Notes window and a Downloads window. The Clipnpaste glass panel rises from the bottom of the screen with a row of eight clip cards: an email reply, a lake photo, a colour code, a link, a code snippet, a dashboard screenshot, an address and the word Approved. The arrow keys move the blue selection ring along to the address card, Return is pressed, the panel drops away and the address appears in the note under Where we're staying.">
+<img src="docs/screenshots/hero.gif" width="880" alt="Animation: a Mac desktop with a Notes window and a Downloads window. The Clipnpaste glass panel rises from the bottom of the screen with a row of eight clip cards: an email reply, a lake photo, a colour code, a link, a code snippet, a dashboard screenshot, an address and the word Approved. The pointer drags the address card up out of the panel, which shrinks to a thin strip, and drops it into the note under Where we're staying, where the address appears as text. The panel grows back, and the pointer drags the lake photo card into the Downloads window, where it appears as a new image file.">
 
 <br><br>
 
