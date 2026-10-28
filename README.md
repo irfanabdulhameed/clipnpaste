@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/icon.png" width="128" alt="Clipnpaste icon: the app's clipboard icon on a rounded square">
+<img src="docs/images/icon.png" width="128" alt="Clipnpaste app icon: a card lifting off a stack of clips">
 
 # Clipnpaste
 
