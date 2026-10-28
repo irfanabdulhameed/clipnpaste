@@ -25,9 +25,14 @@ enum DebugFlags {
     /// `--show-settings SECTION` opens the Settings window on overview, clips, general, panel,
     /// motion, privacy or about (with the demo store and sandboxed settings).
     static let showSettings: String? = value(after: "--show-settings")
+    /// `--welcome N` opens the welcome tour on step N (1 to 15), sandboxed like every check.
+    static let welcomeStep: Int? = value(after: "--welcome").flatMap { Int($0) }
+    /// `--welcome-shots DIR` draws every step's page offscreen into DIR (no window), then quits.
+    static let welcomeShots: String? = value(after: "--welcome-shots")
     /// Any flag that must not touch the real history or clipboard.
     static var usesDemoStore: Bool {
         selfTest || showPanel || demoExtra || demoStates || empty || scene != nil || showSettings != nil || updateDebug
+            || welcomeStep != nil || welcomeShots != nil
     }
     /// Any updater check flag (see UpdateDebug).
     static let updateDebug = args.contains("--update-state") || args.contains("--fake-update") || args.contains("--update-check")

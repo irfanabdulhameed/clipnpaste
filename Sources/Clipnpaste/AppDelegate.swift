@@ -11,10 +11,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: SettingsWindowController?
     private var appMenu: AppMenu?
     private var updater: Updater?
+    private var welcome: WelcomeController?
     private let prefs = Preferences.app
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if UpdateDebug.runIfAsked() { return }
+        if let dir = DebugFlags.welcomeShots {
+            applyAppearance()
+            WelcomeShots.render(into: dir)
+            exit(0)
+        }
         applyAppearance()
         let env: AppEnvironment
         do {
@@ -27,11 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = PanelController(store: env.store, watcher: env.watcher)
         self.panel = panel
         OverviewHooks.openPanel = { [weak panel] in panel?.open() }
+        WelcomeHooks.show = { [weak self] in self?.showWelcome() }
         // The chosen shortcut (⌃⌘V by default) toggles the panel. A debug run (any check flag) gets no
         // global shortcut (the manager is not live in sandbox mode) and no menu bar icon, so an
         // installed copy that is running keeps ⌃⌘V and nothing it shows changes.
-        let shortcuts = ShortcutController(useClassicBlur: { [weak panel] in panel?.useClassicBlur ?? false }) { [weak panel] in
-            panel?.toggle()
+        let shortcuts = ShortcutController(useClassicBlur: { [weak panel] in panel?.useClassicBlur ?? false }) { [weak self] in
+            self?.hotKeyPressed()
         }
         self.shortcuts = shortcuts
         shortcuts.start()
@@ -48,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !DebugFlags.usesDemoStore {
             let menu = StatusMenu(panel: panel, shortcuts: shortcuts)
             menu.onOpenSettings = { [weak self] in self?.showSettings() }
+            menu.onShowWelcome = { [weak self] in self?.showWelcome() }
             menu.onCheckForUpdates = { [weak self] in
                 self?.showSettings(.about)
                 self?.updater?.check()
@@ -75,13 +83,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let name = DebugFlags.showSettings {
             showSettings(SettingsSection(rawValue: name) ?? .overview)
-        } else if !prefs.welcomed, !DebugFlags.usesDemoStore {
-            // Once, on the first launch: the Overview says what the app is and how to open it.
+        } else if let n = DebugFlags.welcomeStep {
+            showWelcome(at: WelcomeStep(number: n) ?? .welcome)
+        } else if !prefs.hasSeenWelcome, !DebugFlags.usesDemoStore {
+            // Once, on the first launch: the welcome tour teaches the app, then opens the panel.
+            prefs.hasSeenWelcome = true
             prefs.welcomed = true
-            showSettings(.overview)
+            showWelcome()
         }
         if DebugFlags.showPanel || DebugFlags.selfTest || DebugFlags.scene != nil {
             Task {
+                if DebugFlags.selfTest { await runWelcomeSelfTest() }
                 panel.open()
                 if DebugFlags.selfTest { await panel.runSelfTest() }
                 if let scene = DebugFlags.scene { await panel.showScene(scene) }
@@ -101,6 +113,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment?.watcher.stop()
         DemoExtras.cleanUp()
         DragPasteboard.cleanUp()
+    }
+
+    /// The global shortcut: on the tour's last step it ends the tour and opens the panel;
+    /// otherwise it toggles the panel.
+    private func hotKeyPressed() {
+        if let welcome, welcome.isVisible, welcome.step == .tryIt {
+            welcome.tryIt()
+        } else {
+            panel?.toggle()
+        }
+    }
+
+    /// The welcome tour, from the start or a given step. Closes the panel first.
+    func showWelcome(at step: WelcomeStep = .welcome) {
+        if let panel, panel.isOpen { panel.close() }
+        guard let shortcuts else { return }
+        let tour = welcome ?? WelcomeController(shortcuts: shortcuts)
+        tour.onFinish = { [weak self] tried in
+            guard let self else { return }
+            self.welcome = nil
+            if tried { self.openPanelAfterTour() }
+        }
+        welcome = tour
+        tour.show(at: step)
+    }
+
+    /// `--self-test`: the tour's checks run first; a failure ends the run with exit code 1.
+    private func runWelcomeSelfTest() async {
+        guard let shortcuts, let panel else { return }
+        let ok = await WelcomeSelfTest.run(shortcuts: shortcuts, panel: panel) { [weak self] step in
+            self?.showWelcome(at: step)
+            return self?.welcome
+        }
+        if !ok { exit(1) }
+    }
+
+    /// The tour's last step: the real panel rises, with a small "You're all set" above it.
+    private func openPanelAfterTour() {
+        guard let panel else { return }
+        // The app that was in front gets a moment to take the keyboard back, so a paste lands there.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (Sandbox.isOn ? 0 : 0.12)) {
+            panel.open()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45 * MotionClock.shared.timeScale) {
+                guard panel.isOpen else { return }
+                panel.toast.show("You're all set", on: panel.screen, material: panel.material,
+                                 increaseContrast: panel.model.theme.increaseContrast, above: panel.glassScreenRect)
+            }
+        }
     }
 
     /// Closes the panel first, then shows Settings (on its last section unless one is given).
