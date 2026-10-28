@@ -6,13 +6,13 @@
 
 **A free, open-source clipboard manager for Mac, with a Liquid Glass panel.**
 
-Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> and a frosted glass panel rises from the bottom of the screen with your clipboard history as a row of cards. Pick one and it pastes straight into the app you were in. A native macOS menu bar app that keeps everything on your Mac, with no account and no network.
+Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> and a frosted glass panel rises from the bottom of the screen with your clipboard history as a row of cards. Pick one and it pastes straight into the app you were in. A native macOS menu bar app that keeps everything on your Mac, with no account and no sync.
 
 ![Latest release](https://img.shields.io/github/v/release/irfanabdulhameed/clipnpaste?label=release&color=5b3fd6)
 ![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000?logo=apple&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![Liquid Glass](https://img.shields.io/badge/macOS%2026-Liquid%20Glass-7b61ff)
-![Local only](https://img.shields.io/badge/network-none-2ea44f)
+![Local only](https://img.shields.io/badge/clips-stay%20on%20your%20Mac-2ea44f)
 ![No dependencies](https://img.shields.io/badge/dependencies-0-2ea44f)
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -114,7 +114,7 @@ Open **Settings** from the menu bar icon. The window has seven sections:
 - **Panel.** How many rows it opens with, when the card buttons show, Light or Dark appearance, and the glass style.
 - **Motion.** How cards tilt, pop and arrive, what the panel does while you drag a card out, and Reduce Motion.
 - **Privacy.** How many clips and how much image storage to keep, **auto-clear** for clips older than a day, a week, 30 days, 90 days or a year, copies from iPhone and iPad, and apps whose copies are never saved.
-- **About.** The version and a link to this page.
+- **About.** The version, **Check for updates**, whether to check automatically, and a link to this page.
 
 <img src="docs/screenshots/settings.png" width="640" alt="The Clipnpaste Settings window on its Overview section. A sidebar lists Overview, Clips, General, Panel, Motion, Privacy and About. The Overview shows 1,284 clips, 37 copied today, image storage at 412 MB of 2 GB with auto-clear after 30 days, the top apps the clips came from, and Accessibility granted.">
 
@@ -124,7 +124,7 @@ Open **Settings** from the menu bar icon. The window has seven sections:
 
 Clipnpaste is a **local-only clipboard manager**. Your clipboard can hold passwords, messages and private photos, so nothing about it leaves your Mac.
 
-- **No network.** Clipnpaste makes no connections at all.
+- **Your clips never leave your Mac.** The only connection Clipnpaste makes is to GitHub, to check for updates: it asks for the latest version number and sends nothing about you or your clips. Turn off **Check for updates automatically** in **Settings › About** and it connects only when you click **Check for updates**.
 - **No account, no telemetry, no analytics.**
 - **Stored on your Mac only.** Clips live in a SQLite database and image files in `~/Library/Application Support/Clipnpaste`.
 - **Passwords are skipped.** Copies that apps mark as concealed, such as those from password managers, are not saved.
@@ -219,10 +219,10 @@ Yes. Clipnpaste is made for macOS 26 Tahoe and uses its Liquid Glass material. I
 The package has no architecture limit, so it builds for the Mac you build it on, Apple Silicon or Intel, as long as it runs macOS 26.
 
 ### Is it safe? Does it save my passwords?
-Clipnpaste skips copies that apps mark as concealed, such as password manager entries. Everything it does save stays on your Mac, and it has no network access of any kind.
+Clipnpaste skips copies that apps mark as concealed, such as password manager entries. Everything it does save stays on your Mac. The only connection it makes is to GitHub to check for updates.
 
 ### Does Clipnpaste send my clipboard anywhere?
-No. There is no account, no sync, no analytics and no network code.
+No. There is no account, no sync and no analytics. The only connection Clipnpaste makes is to GitHub to check for a new version, and that request carries nothing from your clipboard.
 
 ### What does it save?
 Text and images. Each clip keeps its source app and the time.
@@ -241,6 +241,9 @@ Remove single clips with the remove button on each card. To delete everything, q
 
 ### How do I reorder or drag clips out?
 Drag a card sideways to reorder, or out of the panel into any app to drop it there.
+
+### How does Clipnpaste update itself?
+Once a day, and shortly after it starts, Clipnpaste asks GitHub whether a newer version is out. It sends no account details and nothing about your clips. When one is, **Update to** with the version number appears at the top of the menu bar icon's menu, with no popup. Click it, or open **Settings › About** and click **Check for updates**, then **Install and relaunch**. Clipnpaste downloads the new version, checks that it is signed by the same developer as your copy, replaces itself where it is installed and opens again. Your clips and settings stay as they are, and it never updates in the middle of a paste or a drag. To stop the daily check, turn off **Check for updates automatically** in **Settings › About**.
 
 ### Does it support Reduce Motion and Dark mode?
 Yes. It follows Light and Dark mode, Reduce Motion, Reduce Transparency and Increase Contrast.
