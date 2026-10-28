@@ -494,10 +494,20 @@ final class Board {
     // MARK: Entrances and exits
 
     /// Born blurred: blur → 0 (and scale, rise) on `settle`, opacity on `fadeIn` 140 ms.
-    func born(_ m: CardMotion, blur px: Double, delay: Double = 0, scale: Double? = nil, rise: Double? = nil) {
+    /// `focus`: the open's entrance, blur, scale and rise on `focus` over `focusMs` and opacity
+    /// over `focusFadeMs`, instead of a spring.
+    func born(_ m: CardMotion, blur px: Double, delay: Double = 0, scale: Double? = nil, rise: Double? = nil,
+              focus: Bool = false) {
         if Motion.reduce {
             m.blur.set(0); m.es.set(1); m.dy.set(0)
             m.op.set(0); m.op.tween(to: 1, ms: 150)
+            return
+        }
+        if focus {
+            m.blur.set(px); m.blur.tween(to: 0, ms: Motion.focusMs, ease: Motion.focus, delay: delay)
+            if let scale { m.es.set(scale); m.es.tween(to: 1, ms: Motion.focusMs, ease: Motion.focus, delay: delay) }
+            if let rise { m.dy.set(rise); m.dy.tween(to: 0, ms: Motion.focusMs, ease: Motion.focus, delay: delay) }
+            m.op.set(0); m.op.tween(to: 1, ms: Motion.focusFadeMs, ease: Motion.materialise, delay: delay)
             return
         }
         m.blur.set(px); m.blur.spring(to: 0, duration: Motion.settle, delay: delay)

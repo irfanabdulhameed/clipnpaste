@@ -332,8 +332,29 @@ extension PanelController {
             await until { phase == .closed }
             await wait(150)
             toggle()
+            // The first open, frame by frame: the glass materialising and the cards coming into focus.
+            var hook: Int?
+            if i == 0 {
+                let cards = cardsInView()
+                hook = MotionClock.shared.addHook { [unowned self] _ in
+                    let t = (MotionClock.shared.lastTarget - d.riseStart) * 1000
+                    d.note(String(format: "open +%5.1f ms: glass op %.3f scale %.4f y %6.1f | card 1 blur %5.2f op %.3f | card %d blur %5.2f",
+                                  t, self.rise.op.v, self.rise.scale.v, self.rise.y.v,
+                                  cards.first?.blur.v ?? 0, cards.first?.op.v ?? 0, cards.count, cards.last?.blur.v ?? 0))
+                }
+            }
             await until { phase == .open }
-            await idle()
+            if let hook {
+                // The hook keeps the clock running, so wait for the motion itself, then remove it.
+                let cards = cardsInView()
+                await until { !rise.busy && !cards.contains(where: \.busy) }
+                MotionClock.shared.removeHook(hook)
+                await idle()
+                let f = filteredLayers()
+                d.note("open at rest: \(f.count) filtered layers\(f.isEmpty ? "" : " (" + f.joined(separator: ", ") + ")"), glass op \(rise.op.v), scale \(rise.scale.v)")
+            } else {
+                await idle()
+            }
         }
         d.logRiseFrames = false
         // Interrupted: close 90 ms into the rise, re-open 80 ms into the exit.
@@ -444,14 +465,23 @@ extension PanelController {
                 check("\(label): every card in view is born blurred (20 pt, 1.06, 16 pt low, transparent)",
                       !cards.isEmpty && cards.allSatisfy { $0.blur.v == 20 && $0.es.v == 1.06 && $0.dy.v == 16 && $0.op.v == 0 },
                       "\(cards.count) cards")
+                check("\(label): the glass starts at \(Motion.materialiseScale) scale", rise.scale.v == Motion.materialiseScale, "scale \(rise.scale.v)")
                 await wait(90)
                 let blurs = cards.map(\.blur.v)
+                // At ~90 ms the frost is still building and the first card is still well out of focus
+                // (the old 120 ms fade had the glass at full opacity and a spring had the blur near 8).
+                check("\(label): at 90 ms the glass is still materialising (opacity \(f(rise.op.v)) < 0.8)",
+                      rise.op.v > 0.05 && rise.op.v < 0.8, "")
+                check("\(label): at 90 ms the first card is still soft (blur \(f(blurs.first ?? 0)) > 12 px)",
+                      (blurs.first ?? 20) > 12, "")
                 check("\(label): cards enter 12 ms apart (blur rises with the card's place)",
                       blurs.count < 2 || (zip(blurs, blurs.dropFirst()).allSatisfy { $0 <= $1 + 1e-9 } && blurs[0] < blurs[blurs.count - 1]),
                       blurs.map(f).joined(separator: " "))
             }
             await settle()
             rise.y.probe = nil
+            check("\(label): the glass and cards at rest: opacity 1, scale 1, sharp",
+                  rise.scale.v == 1 && cards.allSatisfy { $0.blur.v == 0 && $0.op.v == 1 && $0.es.v == 1 }, "scale \(rise.scale.v)")
             check("\(label): parked at rest and open", phase == .open && rise.y.v == 0 && rise.op.v == 1,
                   "phase \(phase), y \(rise.y.v), op \(rise.op.v)")
             check("\(label): 0 pt past the resting position", minY >= 0, "lowest \(f(minY)) pt")

@@ -20,6 +20,18 @@ enum Motion {
     static let popUp = CubicBezier(0.2, 0, 0, 1)
     static let popDown = CubicBezier(0.333, 0, 0, 1)
     static let easeIn = CubicBezier(0.42, 0, 1, 1)
+    /// The glass materialising on open: a smooth start, then a long settle, so the frost builds
+    /// over the rise instead of switching on. 5% by 25 ms, 58% by 100 ms, 95% by 250 ms.
+    static let materialise = CubicBezier(0.25, 0, 0.1, 1)
+    static let materialiseMs = 360.0
+    /// The cards coming into focus on open: blur 20 → 0 that keeps easing to the end, so the
+    /// last pixels of blur resolve visibly instead of snapping. 13.3 px left at 100 ms, 2.0 at 250.
+    static let focus = CubicBezier(0.3, 0, 0.2, 1)
+    static let focusMs = 400.0
+    /// The cards' opacity follows their focus, ahead of it, so they show while still soft.
+    static let focusFadeMs = 260.0
+    /// The glass starts this small and grows to 1 with its opacity.
+    static let materialiseScale = 0.98
     static let linear = CubicBezier.linear
 
     /// 1 → 1.08 → 1: 60 ms attack, 140 ms return.

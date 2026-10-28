@@ -80,10 +80,13 @@ final class GlassSurface: NSView {
     /// Where the sheet is drawn while it rises or leaves: `drop` points below its frame, at
     /// `opacity`. A transform and an opacity on its own layer, so neither the view's frame nor
     /// the window moves, and the glass is never filtered. At rest: identity and 1.
-    func present(drop: CGFloat, opacity: Double) {
+    /// `scale` grows the sheet about its centre (1 at rest).
+    func present(drop: CGFloat, opacity: Double, scale: Double = 1) {
         guard let layer else { return }
         let down: CGFloat = (layer.superlayer?.isGeometryFlipped ?? false) ? 1 : -1
-        let t = drop == 0 ? CATransform3DIdentity : CATransform3DMakeTranslation(0, down * drop, 0)
+        var t = CardCell.scale(scale, about: CGPoint(x: bounds.midX, y: bounds.midY),
+                               anchor: layer.anchorPoint, size: bounds.size)
+        if drop != 0 { t = CATransform3DConcat(t, CATransform3DMakeTranslation(0, down * drop, 0)) }
         if !CATransform3DEqualToTransform(layer.transform, t) { layer.transform = t }
         LayerLook.opacity(layer, opacity)
     }

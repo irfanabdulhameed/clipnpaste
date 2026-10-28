@@ -288,6 +288,7 @@ final class PanelController {
         panel.ignoresMouseEvents = false
         rise.y.set(0)
         rise.op.set(1)
+        rise.scale.set(1)
         for m in rise.blurred { m.blur.set(0) }
         rise.blurred = []
         content.emptyFx.reset()

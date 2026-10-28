@@ -15,6 +15,8 @@ final class RiseMotion: MotionTarget {
     /// Points below the resting position: 0 at rest, H (glass height + 40) fully out of sight.
     let y: Anim
     let op: Anim
+    /// The glass's scale: `materialiseScale` → 1 as it materialises, 1 at rest.
+    let scale: Anim
     /// The travel of the open or close in progress.
     var travel: Double = 0
     /// Cards the exit blurred, reset when it ends.
@@ -24,11 +26,13 @@ final class RiseMotion: MotionTarget {
         self.controller = controller
         y = Anim(0, owner: nil, eps: 0.05)
         op = Anim(1, owner: nil, eps: 0.002)
+        scale = Anim(1, owner: nil, eps: 0.0005)
         y.owner = self
         op.owner = self
+        scale.owner = self
     }
 
-    var busy: Bool { y.busy || op.busy }
+    var busy: Bool { y.busy || op.busy || scale.busy }
 
     func render() { controller.renderRise() }
 }
@@ -52,18 +56,26 @@ final class Fx: MotionTarget {
 
     func render() { draw(self) }
 
-    /// `blurBorn`: blur → 0 (and scale → 1) on a spring, opacity on `fadeIn` 140 ms.
-    /// Under Reduce Motion it only fades, over 150 ms.
-    func born(blur px: Double, duration: Double = Motion.settle, delay: Double = 0, scale s: Double = 1) {
+    /// `blurBorn`: blur → 0 (and scale → 1) on a spring, opacity on `fadeIn` 140 ms; with
+    /// `focus`, the open's slower focus instead (`focus` over `focusMs`, opacity over
+    /// `focusFadeMs`). Under Reduce Motion it only fades, over 150 ms.
+    func born(blur px: Double, duration: Double = Motion.settle, delay: Double = 0, scale s: Double = 1,
+              focus: Bool = false) {
         if Motion.reduce {
             blur.set(0); scale.set(1)
             op.set(0); op.tween(to: 1, ms: 150, delay: delay)
             return
         }
-        blur.set(px); blur.spring(to: 0, duration: duration, delay: delay)
-        scale.set(s)
+        blur.set(px); scale.set(s); op.set(0)
+        if focus {
+            blur.tween(to: 0, ms: Motion.focusMs, ease: Motion.focus, delay: delay)
+            if s != 1 { scale.tween(to: 1, ms: Motion.focusMs, ease: Motion.focus, delay: delay) }
+            op.tween(to: 1, ms: Motion.focusFadeMs, ease: Motion.materialise, delay: delay)
+            return
+        }
+        blur.spring(to: 0, duration: duration, delay: delay)
         if s != 1 { scale.spring(to: 1, duration: duration, delay: delay) }
-        op.set(0); op.tween(to: 1, ms: 140, ease: Motion.fadeIn, delay: delay)
+        op.tween(to: 1, ms: 140, ease: Motion.fadeIn, delay: delay)
     }
 
     /// Back to rest at once: fully shown, sharp, no filter.
@@ -110,7 +122,10 @@ extension PanelController {
     // MARK: Rise
 
     /// Sets the from-state and starts the rise: the glass rises on `arrive` (bounce 0, never past
-    /// rest) and fades in over 120 ms on `fadeIn`; the cards are born blurred 40 ms + 12 ms apart.
+    /// rest) and materialises as it comes: opacity 0 → 1 and scale 0.98 → 1 over 360 ms on
+    /// `materialise`, so the backdrop frost builds in rather than switching on (the glass's blur
+    /// radius can't be animated, and no filter is ever put on it). The cards come into focus
+    /// 40 ms + 12 ms apart. Input works from the first frame.
     /// Under Reduce Motion the glass only fades in over 150 ms and the cards only fade.
     func startRise() {
         let h = targetHeight + Self.riseExtra
@@ -123,21 +138,23 @@ extension PanelController {
         } else {
             rise.y.set(h)
             rise.op.set(0)
+            rise.scale.set(Motion.materialiseScale)
             rise.y.spring(to: 0, duration: Motion.arrive) { [weak self] in self?.opened() }
-            rise.op.tween(to: 1, ms: 120, ease: Motion.fadeIn)
+            rise.op.tween(to: 1, ms: Motion.materialiseMs, ease: Motion.materialise)
+            rise.scale.tween(to: 1, ms: Motion.materialiseMs, ease: Motion.materialise)
         }
         entrance()
     }
 
-    /// Cards in view, in reading order, each born blurred: 20 → 0 pt blur, 1.06 → 1, 16 pt rise,
-    /// on `settle`, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
+    /// Cards in view, in reading order, each coming into focus: 20 → 0 pt blur, 1.06 → 1, 16 pt
+    /// rise on `focus` over 400 ms, opacity over 260 ms, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
     /// entrance is Together. The selection ring rides its card.
     private func entrance() {
         let stagger = prefs.entrance == .stagger ? 12.0 : 0
         for (i, m) in cardsInView().enumerated() {
-            board.born(m, blur: 20, delay: 40 + stagger * Double(i), scale: 1.06, rise: 16)
+            board.born(m, blur: 20, delay: 40 + stagger * Double(i), scale: 1.06, rise: 16, focus: true)
         }
-        if model.clips.isEmpty { content.emptyFx.born(blur: 20, delay: 40, scale: 1.06) }
+        if model.clips.isEmpty { content.emptyFx.born(blur: 20, delay: 40, scale: 1.06, focus: true) }
     }
 
     /// The cards the open panel shows, top row first, left to right.
@@ -196,15 +213,15 @@ extension PanelController {
         }
         Diagnostics.shared.riseStarted(travel: rise.y.v, reaim: true)
         rise.y.spring(to: 0, duration: Motion.arrive) { [weak self] in self?.opened() }
-        rise.op.tween(to: 1, ms: max(1, 120 * (1 - rise.op.v)), ease: Motion.fadeIn)
-        for m in cardsInView() where m.op.dest > 0.5 {
-            m.blur.spring(to: 0, duration: Motion.settle)
-            if m.op.v < 1 { m.op.tween(to: 1, ms: 100, ease: Motion.fadeIn) }
+        rise.op.tween(to: 1, ms: max(1, Motion.materialiseMs * (1 - rise.op.v)), ease: Motion.materialise)
+        if rise.scale.v < 1 { rise.scale.tween(to: 1, ms: max(1, Motion.materialiseMs * (1 - rise.op.v)), ease: Motion.materialise) }
+        // Back into focus on the same curve, for as long as the blur left needs (the exit blurs to 10).
+        func refocus(_ blur: Anim, _ op: Anim) {
+            if blur.v > 0 { blur.tween(to: 0, ms: max(1, Motion.focusMs * min(1, blur.v / 10)), ease: Motion.focus) }
+            if op.v < 1 { op.tween(to: 1, ms: 100, ease: Motion.fadeIn) }
         }
-        if !content.emptyHost.isHidden {
-            content.emptyFx.blur.spring(to: 0, duration: Motion.settle)
-            if content.emptyFx.op.v < 1 { content.emptyFx.op.tween(to: 1, ms: 100, ease: Motion.fadeIn) }
-        }
+        for m in cardsInView() where m.op.dest > 0.5 { refocus(m.blur, m.op) }
+        if !content.emptyHost.isHidden { refocus(content.emptyFx.blur, content.emptyFx.op) }
     }
 
     /// Ends a running exit at once (a key arrived, or the paste needs the keyboard back now).
@@ -219,7 +236,7 @@ extension PanelController {
     func renderRise(sample: Bool = true) {
         let scale = screen?.backingScaleFactor ?? 2
         let dy = pixelSnap(rise.y.v, scale: scale)
-        surface.present(drop: dy, opacity: rise.op.v)
+        surface.present(drop: dy, opacity: rise.op.v, scale: rise.scale.v)
         if sample { Diagnostics.shared.riseFrame(rise.y.v, rising: phase == .opening) }
     }
 }
