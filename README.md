@@ -24,7 +24,11 @@ Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V
 
 <br><br>
 
-[Features](#features) · [How to use](#how-to-use-the-clipboard-history-panel) · [Privacy](#privacy) · [Download](#download) · [Build from source](#build-from-source) · [Permissions](#permissions) · [FAQ](#faq)
+<img src="docs/screenshots/hero.png" width="880" alt="A Mac desktop with a Notes window and a Downloads window. Along the bottom of the screen, the Clipnpaste glass panel holds a row of eight clip cards: an email reply, a lake photo, a colour code, a link, a code snippet, a dashboard screenshot, an address and the word Approved. The photo card is selected with a blue ring.">
+
+<br><br>
+
+[Features](#features) · [How to use](#how-to-use-the-clipboard-history-panel) · [Settings](#settings) · [Privacy](#privacy) · [Download](#download) · [Build from source](#build-from-source) · [Permissions](#permissions) · [FAQ](#faq)
 
 </div>
 
@@ -53,11 +57,17 @@ It is made for one job: **paste previous clipboard items on a Mac** quickly, wit
 - **Smooth, calm motion.** Every animation uses springs with no overshoot.
 - **Follows your Mac's settings.** Light and Dark mode, Reduce Motion, Reduce Transparency and Increase Contrast.
 
+<img src="docs/screenshots/dark.png" width="880" alt="The same desktop in Dark mode. The panel is two rows tall, its glass and cards dark, with sixteen clips including photos, a chat screenshot, a banner image, an address and a booking reference.">
+
 ## How to use the clipboard history panel
 
 1. Copy text or an image in any app, as you always do.
 2. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd>. The glass panel rises from the bottom of the screen.
 3. Pick a clip with the arrow keys and press <kbd>Return</kbd>, or click it. The panel closes and the clip is pasted into the app you were in.
+
+<img src="docs/screenshots/open.gif" width="880" alt="Animation: the glass panel rises from the bottom of the screen and fades in, and its eight cards come into focus from a soft blur one after another, left to right. Then the panel drops away again.">
+
+<img src="docs/screenshots/select.gif" width="880" alt="Animation: the arrow keys move the selection along the row. A blue ring slides from card to card and each newly selected card gives a small pop, then the selection slides back to the first card.">
 
 ### Keyboard shortcuts
 
@@ -74,9 +84,41 @@ It is made for one job: **paste previous clipboard items on a Mac** quickly, wit
 
 Drag the pill at the top centre of the panel. It snaps to one, two or three rows. At three rows, the content scrolls. History mode stays within three rows too.
 
+<img src="docs/screenshots/resize.gif" width="880" alt="Animation: the pointer drags the pill at the top of the panel upwards. The panel grows from one row of cards to three, the new rows coming into focus, and then the cards scroll up to show older clips.">
+
+### Reorder clips
+
+Drag a card sideways. The other cards move apart to open a slot under the pointer, and the card lands there when you let go. From the keyboard, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>←</kbd> and <kbd>⌥</kbd><kbd>⌘</kbd><kbd>→</kbd> move the selected card one place.
+
+<img src="docs/screenshots/reorder.gif" width="880" alt="Animation: the pointer picks up a card with a colour code. It lifts with a slight tilt and a shadow, the cards beside it slide apart as it moves three places to the right, and it settles into the open slot. Then it is dragged back to where it started.">
+
 ### Drag a clip into another app
 
 Drag a card out of the panel and drop it where you want it. Images go to Finder, Mail and anything else that takes files. Text goes into a text field. The panel shrinks to a thin strip while you drag, so the app underneath is free to drop on, and grows back afterwards.
+
+<img src="docs/screenshots/drag-out.gif" width="880" alt="Animation: the pointer drags a lake photo card up out of the panel. The panel shrinks to a thin glass strip at the bottom of the screen, the card is dropped into a Downloads window where it appears as a new image file, and the panel grows back to its full height.">
+
+### See your history by day
+
+Press <kbd>⌘</kbd><kbd>Y</kbd>, or click the clock button at the top right of the panel. Every clip appears grouped under Today, Yesterday and the days before, and you can scroll back through them. Press <kbd>⌘</kbd><kbd>Y</kbd> again to go back to the row of cards.
+
+<img src="docs/screenshots/history.gif" width="880" alt="Animation: the panel grows to three rows and the clips regroup under day headings, Today and Yesterday. The view scrolls down to older days, then the panel returns to a single row of cards.">
+
+## Settings
+
+Open **Settings** from the menu bar icon. The window has seven sections:
+
+- **Overview.** How many clips you have, how many you copied today, image storage against its 2 GB limit, the apps you copy from most, and whether Accessibility is on.
+- **Clips.** Browse and search everything Clipnpaste has saved, and delete clips one by one or all at once.
+- **General.** Your shortcut, launch at login, which screen the panel opens on, and whether Clipnpaste shows in the menu bar and the Dock.
+- **Panel.** How many rows it opens with, when the card buttons show, Light or Dark appearance, and the glass style.
+- **Motion.** How cards tilt, pop and arrive, what the panel does while you drag a card out, and Reduce Motion.
+- **Privacy.** How many clips and how much image storage to keep, **auto-clear** for clips older than a day, a week, 30 days, 90 days or a year, copies from iPhone and iPad, and apps whose copies are never saved.
+- **About.** The version and a link to this page.
+
+<img src="docs/screenshots/settings.png" width="640" alt="The Clipnpaste Settings window on its Overview section. A sidebar lists Overview, Clips, General, Panel, Motion, Privacy and About. The Overview shows 1,284 clips, 37 copied today, image storage at 412 MB of 2 GB with auto-clear after 30 days, the top apps the clips came from, and Accessibility granted.">
+
+<sub>The pictures and animations on this page are rendered from a design mock-up of Clipnpaste with sample clips.</sub>
 
 ## Privacy
 
