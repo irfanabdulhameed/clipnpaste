@@ -16,6 +16,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let updateItem = NSMenuItem(title: "", action: #selector(showUpdate), keyEquivalent: "")
     private let updateSeparator = NSMenuItem.separator()
     private let checkItem = NSMenuItem(title: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+    private let welcomeItem = NSMenuItem(title: "Welcome tour", action: #selector(showWelcome), keyEquivalent: "")
+    /// Shows the welcome tour from the start.
+    var onShowWelcome: (() -> Void)?
     /// Opens the Settings window.
     var onOpenSettings: (() -> Void)?
     /// Opens Settings › About and checks.
@@ -41,7 +44,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         super.init()
         item.button?.image = MenuBarGlyph.image()
         accessibilityItem.toolTip = "Open Accessibility in System Settings"
-        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem, settingsItem, updateItem, checkItem] {
+        for i in [openItem, shortcutItem, loginItem, loginNoteItem, accessibilityItem, classicItem, settingsItem, updateItem, checkItem, welcomeItem] {
             i.target = self
         }
         updateItem.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
@@ -59,6 +62,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(accessibilityItem)
         menu.addItem(classicItem)
         menu.addItem(.separator())
+        menu.addItem(welcomeItem)
         menu.addItem(checkItem)
         menu.addItem(settingsItem)
         menu.addItem(withTitle: "Quit Clipnpaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -112,6 +116,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func openSettings() { onOpenSettings?() }
     @objc private func checkForUpdates() { onCheckForUpdates?() }
     @objc private func showUpdate() { onShowUpdate?() }
+    @objc private func showWelcome() { onShowWelcome?() }
 
     @objc private func toggleLogin() {
         loginError = nil

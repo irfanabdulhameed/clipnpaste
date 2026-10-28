@@ -10,7 +10,7 @@ public final class Preferences {
         case panelRows, cardButtons, appearance, glass
         case openOn, showMenuBarIcon, showInDock
         case maxClips, maxImageBytes, autoClearDays, ignoredApps, captureUniversalClipboard
-        case settingsSection, settingsFrame, welcomed
+        case settingsSection, settingsFrame, welcomed, hasSeenWelcome
         case checkForUpdates, lastUpdateCheck
     }
 
@@ -75,6 +75,8 @@ public final class Preferences {
     public var settingsFrame: String? { didSet { put(settingsFrame, .settingsFrame) } }
     /// The Settings window has been shown once, on the first launch.
     public var welcomed = false { didSet { put(welcomed, .welcomed) } }
+    /// The welcome tour has been shown once, on the first launch (or the first after updating).
+    public var hasSeenWelcome = false { didSet { put(hasSeenWelcome, .hasSeenWelcome) } }
 
     /// Seconds a clip is kept, from the last time it was copied; nil keeps it forever.
     public var maxAge: TimeInterval? { autoClearDays > 0 ? Double(autoClearDays) * 86_400 : nil }
@@ -140,6 +142,7 @@ public final class Preferences {
         settingsSection = d.string(forKey: Key.settingsSection.rawValue) ?? "overview"
         settingsFrame = d.string(forKey: Key.settingsFrame.rawValue)
         welcomed = flag(.welcomed, false)
+        hasSeenWelcome = flag(.hasSeenWelcome, false)
     }
 
     private func put(_ value: Any?, _ key: Key) {

@@ -44,6 +44,17 @@ struct AboutSection: View {
             }
 
             Section {
+                LabeledContent {
+                    Button("Show Welcome Tour") { WelcomeHooks.show?() }
+                        .disabled(WelcomeHooks.show == nil)
+                        .help("A short tour of what Clipnpaste can do")
+                } label: {
+                    Text("Welcome tour")
+                    Text("Fifteen short steps, one feature each.")
+                }
+            }
+
+            Section {
                 LabeledContent("Source code") {
                     Button("Open on GitHub") { NSWorkspace.shared.open(Self.repository) }
                         .help(Self.repository.absoluteString)

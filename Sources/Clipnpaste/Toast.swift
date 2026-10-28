@@ -55,7 +55,10 @@ final class Toast {
     /// The text's blur filter, for the checks.
     var textHasFilter: Bool { hosting.layer?.filters?.isEmpty == false }
 
-    func show(_ text: String, on screen: NSScreen?, material: GlassSurface.Material, increaseContrast: Bool) {
+    /// `above`: a frame on screen the capsule sits 12 pt above (the open panel), instead of the
+    /// bottom of the screen.
+    func show(_ text: String, on screen: NSScreen?, material: GlassSurface.Material, increaseContrast: Bool,
+              above: NSRect? = nil) {
         guard let screen = screen ?? NSScreen.main else { return }
         model.text = text
         surface.material = material
@@ -63,7 +66,7 @@ final class Toast {
         let textWidth = (text as NSString).size(withAttributes: [.font: Self.font]).width
         let w = (textWidth + 32).rounded(.up), h = Self.height
         let vf = screen.visibleFrame
-        let x = (vf.midX - w / 2).rounded(.down), y = vf.minY + 24
+        let x = (vf.midX - w / 2).rounded(.down), y = above.map { ($0.maxY + 12).rounded() } ?? vf.minY + 24
         window.setFrame(NSRect(x: x - Self.room, y: y - Self.room, width: w + 2 * Self.room, height: h + 2 * Self.room), display: false)
         surface.frame = NSRect(x: Self.room, y: Self.room, width: w, height: h)
         if Motion.reduce {
