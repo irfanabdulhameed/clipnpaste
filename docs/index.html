@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipnpaste — build it with us</title>
+<meta name="description" content="Clipnpaste is a free, open-source clipboard manager for macOS 26 with a Liquid Glass panel. Swift 6, zero dependencies, MIT. Here is how to contribute.">
+<meta property="og:title" content="Clipnpaste — an open-source clipboard manager for Mac">
+<meta property="og:description" content="Swift 6, zero dependencies, local only, MIT. Build it with us.">
+<meta property="og:image" content="screenshots/dark.png">
+<link rel="icon" href="images/icon.png">
+<script>try{if(localStorage.getItem('theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f4fb; --bg-2:#ffffff; --ink:#15121f; --ink-2:#4a4560; --ink-3:#7c7791;
+  --line:rgba(21,18,31,.09); --glass:rgba(255,255,255,.55); --glass-edge:rgba(255,255,255,.8);
+  --accent:#5b3fd6; --accent-2:#7b61ff; --accent-ink:#fff; --accent-soft:rgba(91,63,214,.1);
+  --green:#1f9d55; --code-bg:#14111d; --code-ink:#e8e4f5;
+  --shadow:0 1px 2px rgba(21,18,31,.05),0 12px 40px -12px rgba(43,25,120,.18);
+  --r:22px; --maxw:1160px;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#0c0a12; --bg-2:#14111d; --ink:#f2effa; --ink-2:#b7b1cc; --ink-3:#8a84a0;
+    --line:rgba(255,255,255,.08); --glass:rgba(30,26,44,.55); --glass-edge:rgba(255,255,255,.12);
+    --accent:#8b74ff; --accent-2:#a594ff; --accent-ink:#0c0a12; --accent-soft:rgba(139,116,255,.14);
+    --green:#4ade80; --code-bg:#08070c;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 20px 50px -20px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit}
+kbd{font:500 .82em "JetBrains Mono",ui-monospace,monospace;padding:.12em .45em;border-radius:6px;border:1px solid var(--line);background:var(--bg-2);box-shadow:0 1px 0 var(--line)}
+code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.9em}
+.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:24px}
+@media (max-width:600px){.wrap{padding-inline:16px}}
+
+/* backdrop */
+.mesh{position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(40vw 40vw at 12% 8%,rgba(123,97,255,.22),transparent 60%),
+    radial-gradient(35vw 35vw at 90% 15%,rgba(255,140,200,.16),transparent 60%),
+    radial-gradient(45vw 45vw at 70% 90%,rgba(90,200,255,.12),transparent 60%);}
+.mesh::after{content:"";position:absolute;inset:0;opacity:.35;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")}
+
+/* nav */
+nav.top{position:sticky;top:12px;z-index:50;margin:12px auto 0;max-width:calc(var(--maxw) - 48px);
+  display:flex;align-items:center;gap:20px;padding:8px 8px 8px 16px;border-radius:999px;
+  background:var(--glass);border:1px solid var(--glass-edge);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);box-shadow:var(--shadow)}
+@media (max-width:1208px){nav.top{margin-left:16px;margin-right:16px}}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none;letter-spacing:-.01em}
+.brand img{width:28px;height:28px}
+nav.top .links{display:flex;gap:4px;margin-left:auto}
+nav.top .links a{text-decoration:none;color:var(--ink-2);font-size:14px;padding:8px 12px;border-radius:999px}
+nav.top .links a:hover{color:var(--ink);background:var(--accent-soft)}
+@media (max-width:820px){nav.top .links{display:none}nav.top .theme-toggle{margin-left:auto}}
+
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 15px/1 Inter,sans-serif;text-decoration:none;padding:13px 20px;border-radius:999px;border:1px solid transparent;cursor:pointer;transition:transform .2s,box-shadow .2s,background .2s;white-space:nowrap}
+.btn svg{width:18px;height:18px;flex:none}
+.btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 24px -8px var(--accent)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 30px -8px var(--accent)}
+.btn-ghost{background:var(--glass);border-color:var(--line);color:var(--ink);backdrop-filter:blur(12px)}
+.btn-ghost:hover{border-color:var(--accent)}
+.btn-sm{padding:10px 16px;font-size:14px}
+.theme-toggle{all:unset;cursor:pointer;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);border:1px solid var(--line);background:var(--bg-2);transition:color .2s,border-color .2s;flex:none}
+.theme-toggle:hover{color:var(--ink);border-color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-toggle svg{width:18px;height:18px}
+.theme-toggle .moon,[data-theme="dark"] .theme-toggle .sun{display:none}
+[data-theme="dark"] .theme-toggle .moon{display:block}
+
+/* type */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 "JetBrains Mono",monospace;letter-spacing:.02em;color:var(--accent);text-transform:uppercase}
+h1,h2{font-family:"Instrument Serif",Georgia,serif;font-weight:400;letter-spacing:-.02em;line-height:1.02;margin:0}
+h1{font-size:clamp(48px,8.5vw,108px)}
+h2{font-size:clamp(36px,5.5vw,64px)}
+h1 em,h2 em{font-style:italic;color:var(--accent)}
+h3{font-size:18px;margin:0 0 6px;letter-spacing:-.01em}
+.lede{font-size:clamp(17px,2vw,20px);color:var(--ink-2);max-width:620px}
+section{padding-top:140px}
+@media (max-width:600px){section{padding-top:96px}}
+.sec-head{display:grid;gap:18px;margin-bottom:48px;max-width:760px}
+
+/* hero */
+.hero{padding-top:88px;text-align:center}
+.hero .eyebrow{padding:8px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--line)}
+.hero .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(31,157,85,.18)}
+.hero h1{margin:28px auto 22px;max-width:980px}
+.hero .lede{margin:0 auto}
+.cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+.micro{margin-top:16px;font-size:13px;color:var(--ink-3)}
+.micro span+span::before{content:"·";margin:0 8px}
+
+.frame{margin:64px auto 0;max-width:1040px;border-radius:18px;padding:10px;background:var(--glass);border:1px solid var(--glass-edge);box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.frame .bar{display:flex;gap:7px;padding:4px 6px 12px}
+.frame .bar i{width:11px;height:11px;border-radius:50%;background:#ff5f57}
+.frame .bar i:nth-child(2){background:#febc2e}.frame .bar i:nth-child(3){background:#28c840}
+.frame img{border-radius:10px;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;background:var(--bg-2)}
+.frame figcaption{font-size:12px;color:var(--ink-3);padding:10px 6px 2px;text-align:left}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;margin-top:72px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:var(--line)}
+.stats div{background:var(--bg-2);padding:26px 20px;text-align:left}
+.stats b{display:block;font:400 44px/1 "Instrument Serif",serif;letter-spacing:-.02em}
+.stats span{font-size:13px;color:var(--ink-3)}
+@media (max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}.stats div:last-child{grid-column:span 2}}
+
+/* demo */
+.demo{position:relative;border-radius:28px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);
+  background:linear-gradient(135deg,#c9b8ff 0%,#ffc6e0 45%,#a9e4ff 100%);min-height:520px;display:flex;flex-direction:column}
+[data-theme="dark"] .demo{background:linear-gradient(135deg,#2a1d63 0%,#4a1d45 50%,#123a52 100%)}
+.note{margin:40px auto 0;width:min(560px,calc(100% - 32px));background:var(--bg-2);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.note .bar{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:center;font-size:12px;color:var(--ink-3)}
+.note .bar i{width:10px;height:10px;border-radius:50%;background:#ff5f57}.note .bar i:nth-child(2){background:#febc2e}.note .bar i:nth-child(3){background:#28c840}
+.note .bar span{margin-left:auto}
+.note .body{padding:18px 20px 22px;font-size:15px;min-height:150px}
+.note .body p{margin:0 0 8px}
+.note .pasted{display:inline;background:var(--accent-soft);border-radius:4px;padding:1px 3px;animation:flash .9s ease-out}
+.note .pasted img{display:inline-block;vertical-align:middle;height:48px;border-radius:6px}
+.caret{display:inline-block;width:2px;height:1.1em;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@keyframes flash{from{background:var(--accent)}}
+.hint{text-align:center;font-size:13px;color:rgba(21,18,31,.7);margin:18px 16px 0}
+[data-theme="dark"] .hint{color:rgba(255,255,255,.7)}
+.hint button{all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.panel{margin-top:auto;padding:16px 18px 20px;background:rgba(255,255,255,.38);border-top:1px solid rgba(255,255,255,.7);
+  backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);
+  transform:translateY(105%);opacity:0;transition:transform .55s cubic-bezier(.2,.9,.25,1),opacity .4s}
+[data-theme="dark"] .panel{background:rgba(20,16,32,.45);border-top-color:rgba(255,255,255,.14)}
+.panel.open{transform:none;opacity:1}
+.panel .pill{width:44px;height:5px;border-radius:3px;background:rgba(0,0,0,.18);margin:0 auto 14px}
+.cards{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:12px;overflow-x:auto;padding:4px;scrollbar-width:none}
+.card{all:unset;cursor:pointer;position:relative;aspect-ratio:16/10;border-radius:14px;background:var(--bg-2);padding:10px 12px;font-size:12px;line-height:1.35;color:var(--ink-2);
+  box-shadow:0 1px 2px rgba(0,0,0,.08);transition:transform .25s cubic-bezier(.2,.9,.25,1),box-shadow .25s;overflow:hidden;display:flex;flex-direction:column;gap:6px;min-width:130px}
+.card:hover{transform:translateY(-3px)}
+.card[aria-selected="true"]{box-shadow:0 0 0 3px #0a84ff,0 10px 24px -10px rgba(10,132,255,.6);transform:scale(1.03)}
+.card .meta{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);margin-top:auto}
+.card.swatch{background:#5b3fd6;color:#fff}.card.swatch .meta{color:rgba(255,255,255,.75)}
+.card.photo{padding:0;background:linear-gradient(160deg,#89c4f4,#3f7cac 55%,#264653)}
+.card.photo .meta{position:absolute;inset:auto 10px 8px;color:#fff}
+.card pre{margin:0;font:11px/1.4 "JetBrains Mono",monospace;color:var(--ink)}
+.panel .opening .card{animation:cardIn .5s cubic-bezier(.2,.9,.25,1) backwards}
+@keyframes cardIn{from{opacity:0;filter:blur(8px);transform:translateY(8px)}}
+
+/* bento: ways to contribute */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.tile{grid-column:span 2;background:var(--glass);border:1px solid var(--glass-edge);border-radius:var(--r);padding:28px;box-shadow:var(--shadow);backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden}
+.tile.wide{grid-column:span 3}
+.tile p{margin:0;color:var(--ink-2);font-size:15px}
+.tile .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:6px}
+.tile .ico svg{width:22px;height:22px}
+.tile .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:10px}
+.tile .tags code{font-size:11.5px;padding:3px 8px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-2)}
+.tile a.more{margin-top:6px;font-size:14px;font-weight:600;color:var(--accent);text-decoration:none}
+.tile a.more:hover{text-decoration:underline}
+@media (max-width:900px){.tile,.tile.wide{grid-column:span 3}}
+@media (max-width:600px){.bento{grid-template-columns:1fr}.tile,.tile.wide{grid-column:auto}}
+
+/* steps + terminal */
+.split{display:grid;grid-template-columns:1fr 1.15fr;gap:48px;align-items:start}
+@media (max-width:900px){.split{grid-template-columns:1fr}}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s;display:grid;gap:8px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:14px;padding:18px;border-radius:16px;cursor:pointer;border:1px solid transparent;transition:background .2s,border-color .2s}
+.steps li::before{content:counter(s,decimal-leading-zero);font:500 13px/44px "JetBrains Mono",monospace;text-align:center;border-radius:12px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-3);height:44px}
+.steps li.on{background:var(--glass);border-color:var(--glass-edge);box-shadow:var(--shadow)}
+.steps li.on::before{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.steps p{margin:0;color:var(--ink-2);font-size:15px}
+.term{position:sticky;top:100px;background:var(--code-bg);color:var(--code-ink);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.06)}
+.term .bar{display:flex;align-items:center;gap:7px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);font:12px "JetBrains Mono",monospace;color:#8a84a0}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:#ff5f57}.term .bar i:nth-child(2){background:#febc2e}.term .bar i:nth-child(3){background:#28c840}
+.term .bar span{margin-left:8px}
+.term .bar button{margin-left:auto;all:unset;cursor:pointer;font:12px "JetBrains Mono",monospace;color:#c9c2e6;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12)}
+.term .bar button:hover{border-color:#a594ff}
+.term pre{margin:0;padding:22px;font:13.5px/1.75 "JetBrains Mono",monospace;overflow-x:auto;min-height:280px;white-space:pre}
+.term .c{color:#6f6a86}.term .p{color:#a594ff}.term .o{color:#7ee2a8}
+
+/* code map */
+.map{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media (max-width:760px){.map{grid-template-columns:1fr}}
+.dir{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.dir h3{font:500 15px "JetBrains Mono",monospace;display:flex;align-items:center;gap:10px}
+.dir h3 small{font:500 11px Inter,sans-serif;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.dir ul{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+.dir li{display:grid;grid-template-columns:190px 1fr;gap:12px;font-size:14px;color:var(--ink-2)}
+.dir li code{color:var(--ink);font-size:12.5px}
+@media (max-width:480px){.dir li{grid-template-columns:1fr;gap:0}}
+
+/* rules + limits */
+.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--line)}
+.rules div{padding:28px 28px 28px 0;border-bottom:1px solid var(--line)}
+.rules div:not(:nth-child(3n)){border-right:1px solid var(--line)}
+.rules div:not(:nth-child(3n+1)){padding-left:28px}
+.rules b{font:400 28px/1.1 "Instrument Serif",serif;display:block;margin-bottom:8px}
+.rules p{margin:0;color:var(--ink-2);font-size:15px}
+@media (max-width:820px){.rules{grid-template-columns:1fr}.rules div{border-right:0!important;padding-left:0!important}}
+.nots{display:flex;flex-wrap:wrap;gap:10px;margin-top:36px}
+.nots span{padding:10px 16px;border-radius:999px;border:1px dashed var(--line);color:var(--ink-2);font-size:14px;background:var(--bg-2)}
+.nots span s{color:var(--ink-3)}
+
+/* marquee */
+.marquee{overflow:hidden;margin-top:56px;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.marquee .track{display:flex;gap:16px;width:max-content;animation:scroll 60s linear infinite}
+.marquee:hover .track{animation-play-state:paused}
+.marquee figure{margin:0;width:420px;flex:none;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--bg-2)}
+.marquee img{width:100%;height:auto;aspect-ratio:16/10;object-fit:cover}
+.marquee figcaption{font-size:13px;color:var(--ink-2);padding:10px 14px}
+@media (max-width:600px){.marquee figure{width:300px}}
+@keyframes scroll{to{transform:translateX(calc(-50% - 8px))}}
+
+/* faq */
+.faq{max-width:820px;margin-inline:auto}
+#faq .sec-head{margin-inline:auto;text-align:center;justify-items:center}
+.faq details{border-bottom:1px solid var(--line);padding:4px 0}
+.faq summary{cursor:pointer;list-style:none;padding:20px 40px 20px 0;font-weight:600;font-size:17px;position:relative}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";position:absolute;right:4px;top:14px;font:300 28px/1 Inter,sans-serif;color:var(--ink-3);transition:transform .25s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{margin:0 0 20px;color:var(--ink-2)}
+
+/* final cta */
+.final{margin:120px 0 0;padding:80px 32px;text-align:center;border-radius:32px;position:relative;overflow:hidden;color:#fff;
+  background:radial-gradient(60% 120% at 50% 0%,#7b61ff 0%,#4a2fc2 45%,#1d1240 100%)}
+.final h2{color:#fff}.final h2 em{color:#ffd1ec}
+.final p{color:rgba(255,255,255,.8);max-width:560px;margin:18px auto 0;font-size:18px}
+.final .btn-primary{background:#fff;color:#2a1a7a;box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.final .btn-ghost{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
+.final img{width:88px;height:88px;margin:0 auto 24px;filter:drop-shadow(0 12px 24px rgba(0,0,0,.35))}
+footer{padding:48px 0 40px;color:var(--ink-3);font-size:14px;display:flex;gap:16px;justify-content:space-between;flex-wrap:wrap}
+footer a{color:var(--ink-2);text-decoration:none}footer a:hover{color:var(--accent)}
+footer nav{display:flex;gap:18px;flex-wrap:wrap}
+
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.9,.25,1)}
+.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="mesh" aria-hidden="true"></div>
+
+<nav class="top" aria-label="Main">
+  <a class="brand" href="#top"><img src="images/icon.png" alt="">Clipnpaste</a>
+  <div class="links">
+    <a href="#try">Try it</a>
+    <a href="#contribute">Contribute</a>
+    <a href="#start">Get started</a>
+    <a href="#code">The code</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch to dark theme">
+    <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+  <a class="btn btn-primary btn-sm" href="https://github.com/irfanabdulhameed/clipnpaste">
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    <span>Star<span id="stars"></span></span>
+  </a>
+</nav>
+
+<main id="top">
+<header class="hero wrap">
+  <span class="eyebrow"><span class="dot"></span>Open source · MIT · v0.1.2</span>
+  <h1>Copy once. Paste <em>anything.</em><br>Build it with us.</h1>
+  <p class="lede">Clipnpaste is a native clipboard manager for macOS 26 with a Liquid Glass panel. It is small, local-only and written in plain Swift with zero dependencies, so you can read the whole thing over a weekend and ship your first change on Monday.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="#start">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      Make your first contribution
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/irfanabdulhameed/clipnpaste/releases/latest/download/Clipnpaste.dmg">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6 11 6 6 6-6"/><path d="M5 21h14"/></svg>
+      Download for Mac
+    </a>
+  </div>
+  <p class="micro"><span>No Xcode needed</span><span>one script to build</span><span>125 tests</span></p>
+
+  <figure class="frame reveal">
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+    <img src="screenshots/hero.gif" width="1040" height="650" alt="The Clipnpaste glass panel rises from the bottom of a Mac desktop with a row of clip cards. An address card is dragged into a note and a lake photo into a Downloads window.">
+    <figcaption>Press ⌃⌘V. Pick a card. It pastes into the app you were in, or drag it out anywhere.</figcaption>
+  </figure>
+
+  <div class="stats reveal">
+    <div><b>0</b><span>third-party dependencies</span></div>
+    <div><b>78</b><span>Swift files, one package</span></div>
+    <div><b>125</b><span>tests on the core</span></div>
+    <div><b>6</b><span>Swift language mode</span></div>
+    <div><b>1</b><span>network call: update check</span></div>
+  </div>
+</header>
+
+<section id="try" class="wrap">
+  <div class="sec-head reveal">
+    <span class="eyebrow">Try it right here</span>
+    <h2>Feel the loop <em>before</em> you read the code.</h2>
+    <p class="lede">A tiny web copy of the panel. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> (or tap below), move with <kbd>←</kbd> <kbd>→</kbd>, press <kbd>Return</kbd> to paste into the note. The real thing does this in AppKit and Core Animation, and the spring numbers live in <code>MotionTokens.swift</code>.</p>
+  </div>
+  <div class="demo reveal" id="demo">
+    <div class="note" aria-live="polite">
+      <div class="bar"><i></i><i></i><i></i><span>Notes — Trip to the lake</span></div>
+      <div class="body" id="noteBody"><p>Where we're staying: <span class="caret"></span></p></div>
+    </div>
+    <p class="hint" id="hint">Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> or <button type="button" id="openBtn">open the panel</button></p>
+    <div class="panel" id="panel" aria-hidden="true">
+      <div class="pill"></div>
+      <div class="cards" role="listbox" aria-label="Clipboard history" id="cards">
+        <button class="card" role="option" data-paste="12 Lakeview Road, Keswick CA12 5DE"><span>12 Lakeview Road, Keswick CA12 5DE</span><span class="meta"><span>Maps</span><span>2m</span></span></button>
+        <button class="card photo" role="option" data-paste="[photo]" aria-label="Lake photo"><span class="meta"><span>Photos</span><span>5m</span></span></button>
+        <button class="card swatch" role="option" data-paste="#5B3FD6"><span style="font:600 16px 'JetBrains Mono',monospace">#5B3FD6</span><span class="meta"><span>Figma</span><span>9m</span></span></button>
+        <button class="card" role="option" data-paste="github.com/irfanabdulhameed/clipnpaste"><span style="color:#0a84ff">github.com/irfanabdulhameed/clipnpaste</span><span class="meta"><span>Safari</span><span>14m</span></span></button>
+        <button class="card" role="option" data-paste="./scripts/build.sh --run"><pre>./scripts/build.sh --run</pre><span class="meta"><span>Terminal</span><span>20m</span></span></button>
+        <button class="card" role="option" data-paste="Approved ✅"><span style="font-weight:600;color:var(--ink)">Approved ✅</span><span class="meta"><span>Slack</span><span>1h</span></span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contribute" class="wrap">
+  <div class="sec-head reveal">
+    <span class="eyebrow">Ways in</span>
+    <h2>Every kind of help <em>counts.</em></h2>
+    <p class="lede">You don't need to be a Swift expert. Pick the door that fits you. Each one maps to a real part of the repo.</p>
+  </div>
+  <div class="bento">
+    <article class="tile wide reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3 3 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg></div>
+      <h3>Report and fix bugs</h3>
+      <p>An app that skipped a copy, a paste that landed in the wrong window, a card that drew wrong on a second display. A clear issue with your macOS version and steps is already a contribution. A failing test is even better.</p>
+      <div class="tags"><code>ClipboardWatcher</code><code>Paster</code><code>PanelController</code></div>
+      <a class="more" href="https://github.com/irfanabdulhameed/clipnpaste/issues/new">Open an issue →</a>
+    </article>
+    <article class="tile wide reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-5 3.8L16.5 20 12 16.5 7.5 20 9 13.8 4 10l6.1-1.2z"/></svg></div>
+      <h3>Build a feature</h3>
+      <p>Pinned clips, search inside the panel, rich-text and file clips, better multi-display behaviour. Open an issue first so we can agree on the shape, then send a focused PR.</p>
+      <div class="tags"><code>ClipnpasteCore</code><code>CaptureRules</code><code>ClipQueries</code></div>
+      <a class="more" href="https://github.com/irfanabdulhameed/clipnpaste/issues">See open issues →</a>
+    </article>
+    <article class="tile reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c3-6 6-6 10 0s7 6 10 0"/></svg></div>
+      <h3>Polish the motion</h3>
+      <p>Springs with no overshoot are the house style. If you have an eye for feel, tune the tokens and show a before and after.</p>
+      <div class="tags"><code>MotionTokens</code><code>PanelMotion</code></div>
+    </article>
+    <article class="tile reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
+      <h3>Accessibility</h3>
+      <p>VoiceOver labels, keyboard paths, Increase Contrast and Reduce Transparency. Test with them on and tell us what breaks.</p>
+      <div class="tags"><code>CardView</code><code>GlassSurface</code></div>
+    </article>
+    <article class="tile reveal">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M8 7h8M8 11h6"/></svg></div>
+      <h3>Docs and words</h3>
+      <p>Clearer setup steps, better screenshots, plain-English copy in Settings and the welcome tour. Writers welcome.</p>
+      <div class="tags"><code>README.md</code><code>Welcome/</code></div>
+    </article>
+  </div>
+</section>
+
+<section id="start" class="wrap">
+  <div class="split">
+    <div>
+      <div class="sec-head reveal" style="margin-bottom:28px">
+        <span class="eyebrow">Your first PR</span>
+        <h2>Four steps. <em>No Xcode.</em></h2>
+        <p class="lede">All you need is macOS 26 and Apple's Command Line Tools. Click a step to see the commands.</p>
+      </div>
+      <ol class="steps reveal" id="steps">
+        <li class="on" data-step="0"><div><h3>Get the tools and the code</h3><p>Install the Command Line Tools, fork the repo on GitHub and clone your fork.</p></div></li>
+        <li data-step="1"><div><h3>Build and run it</h3><p><code>build.sh</code> builds a release app, installs it in <code>~/Applications</code> and opens it. Look for the icon in your menu bar.</p></div></li>
+        <li data-step="2"><div><h3>Make a change, run the tests</h3><p>Logic goes in <code>ClipnpasteCore</code> with a test beside it. <code>test.sh</code> runs the swift-testing suite with only the Command Line Tools.</p></div></li>
+        <li data-step="3"><div><h3>Open a pull request</h3><p>One change per PR, a sentence on why, and a GIF or screenshot if it touches the UI.</p></div></li>
+      </ol>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i><span>~/clipnpaste — zsh</span><button type="button" id="copyBtn">Copy</button></div>
+      <pre id="termOut"></pre>
+    </div>
+  </div>
+</section>
+
+<section id="code" class="wrap">
+  <div class="sec-head reveal">
+    <span class="eyebrow">Map of the code</span>
+    <h2>Two targets. <em>One idea each.</em></h2>
+    <p class="lede">The core is pure logic you can test without a screen. The app is everything you see and touch. Start in the core if you want a quick win.</p>
+  </div>
+  <div class="map">
+    <div class="dir reveal">
+      <h3>Sources/ClipnpasteCore <small>tested</small></h3>
+      <ul>
+        <li><code>PasteboardWatcher</code><span>polls the change counter twice a second, slower when idle</span></li>
+        <li><code>CaptureRules</code><span>skips concealed and transient copies, ignored apps</span></li>
+        <li><code>ClipStore · SQLite</code><span>a small SQLite wrapper of its own, no ORM</span></li>
+        <li><code>ClipQueries</code><span>history by day, search, counts</span></li>
+        <li><code>CardLayout · PanelGrid</code><span>card sizes and rows from screen size</span></li>
+        <li><code>Motion</code><span>spring maths behind every animation</span></li>
+      </ul>
+    </div>
+    <div class="dir reveal">
+      <h3>Sources/Clipnpaste <small>the app</small></h3>
+      <ul>
+        <li><code>PanelWindow · PanelView</code><span>one long-lived non-activating NSPanel</span></li>
+        <li><code>GlassSurface</code><span>the Liquid Glass material</span></li>
+        <li><code>CardView · CardDrag</code><span>cards, reorder and drag out</span></li>
+        <li><code>Paster</code><span>writes the clip, sends ⌘V to your app</span></li>
+        <li><code>HotKey · ShortcutRecorder</code><span>the global shortcut</span></li>
+        <li><code>Settings/ · Welcome/ · Update/</code><span>SwiftUI settings, the tour, self-update</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="sec-head reveal">
+    <span class="eyebrow">House rules</span>
+    <h2>What we <em>protect.</em></h2>
+    <p class="lede">A clipboard holds passwords, messages and private photos. These rules keep it trustworthy, and PRs are reviewed against them.</p>
+  </div>
+  <div class="rules reveal">
+    <div><b>Local only.</b><p>Clips never leave the Mac. The one allowed request is the GitHub update check, and it carries nothing about the user.</p></div>
+    <div><b>Zero dependencies.</b><p>Apple frameworks and the system SQLite. If you need a library, write the small part you need.</p></div>
+    <div><b>Calm motion.</b><p>Springs with no overshoot. Respect Reduce Motion everywhere.</p></div>
+    <div><b>Never steal focus.</b><p>The panel must never activate itself over the app you are pasting into.</p></div>
+    <div><b>Test the core.</b><p>Logic in ClipnpasteCore ships with a test. UI changes ship with a GIF.</p></div>
+    <div><b>Plain words.</b><p>Copy in the app and docs is short, literal and friendly. No jargon.</p></div>
+  </div>
+  <div class="nots reveal" aria-label="Things Clipnpaste will not do">
+    <span><s>Cloud sync</s> · on purpose</span>
+    <span><s>Accounts</s></span>
+    <span><s>Telemetry or analytics</s></span>
+    <span><s>Electron or web views</s></span>
+    <span><s>Reading your keystrokes</s></span>
+  </div>
+</section>
+
+<section class="reveal">
+  <div class="wrap"><div class="sec-head" style="margin-bottom:0">
+    <span class="eyebrow">What you'd be working on</span>
+    <h2>Small app. <em>Lots of craft.</em></h2>
+  </div></div>
+  <div class="marquee" aria-label="Clipnpaste features">
+    <div class="track">
+      <figure><img loading="lazy" src="screenshots/open.gif" alt="The panel rises and cards blur into focus"><figcaption>Panel rise and card arrival</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/select.gif" alt="Arrow keys move a blue selection ring"><figcaption>Keyboard selection</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/reorder.gif" alt="A card is dragged to a new slot"><figcaption>Drag to reorder</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/drag-out.gif" alt="A photo card dragged into Finder"><figcaption>Drag out into any app</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/resize.gif" alt="Panel grows from one to three rows"><figcaption>One, two or three rows</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/history.gif" alt="Clips grouped under day headings"><figcaption>History by day</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/dark.png" alt="Panel in Dark mode, two rows"><figcaption>Dark mode</figcaption></figure>
+      <figure><img loading="lazy" src="screenshots/settings.png" alt="Settings window overview"><figcaption>Settings</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="wrap">
+  <div class="sec-head reveal">
+    <span class="eyebrow">Contributor FAQ</span>
+    <h2>Questions, <em>answered.</em></h2>
+  </div>
+  <div class="faq reveal">
+    <details><summary>Do I need Xcode?</summary><p>No. The Command Line Tools are enough (<code>xcode-select --install</code>). <code>scripts/test.sh</code> points SwiftPM at the Testing framework that ships with them.</p></details>
+    <details><summary>Why does macOS forget the Accessibility permission after I rebuild?</summary><p>Without a signing certificate, <code>build.sh</code> signs ad hoc, and macOS treats each ad-hoc build as a new app. Set <code>CLIPNPASTE_SIGN_ID="Your Certificate"</code> to sign with a stable identity of your own.</p></details>
+    <details><summary>I'm new to Swift. Where should I start?</summary><p>In <code>Sources/ClipnpasteCore</code>. It is plain Swift with no UI, every file has tests next to it in <code>Tests/</code>, and you can run them in seconds.</p></details>
+    <details><summary>Can I add a dependency?</summary><p>Please don't. Zero dependencies keeps the app small, auditable and safe for something that sees your clipboard. Open an issue if you think there is a real case.</p></details>
+    <details><summary>Will you accept sync or cloud features?</summary><p>No. Clipnpaste is local-only on purpose. Features that send clipboard data off the Mac won't be merged.</p></details>
+    <details><summary>How big should a pull request be?</summary><p>One change. If it touches the UI, attach a short GIF. If it touches the core, add or update a test. For anything larger than a bug fix, open an issue first.</p></details>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="final reveal">
+    <img src="images/icon.png" alt="">
+    <h2>Make the clipboard <em>better</em><br>for every Mac.</h2>
+    <p>Star the repo, pick an issue, or just tell us what you'd change. Every contribution gets read.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/irfanabdulhameed/clipnpaste">View on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/irfanabdulhameed/clipnpaste/issues">Browse issues</a>
+    </div>
+  </div>
+  <footer>
+    <span>MIT © 2026 Irfan Abdul Hameed · Clipnpaste</span>
+    <nav>
+      <a href="https://github.com/irfanabdulhameed/clipnpaste">GitHub</a>
+      <a href="https://github.com/irfanabdulhameed/clipnpaste/releases">Releases</a>
+      <a href="https://github.com/irfanabdulhameed/clipnpaste#readme">README</a>
+      <a href="https://github.com/irfanabdulhameed/clipnpaste/blob/main/LICENSE">License</a>
+    </nav>
+  </footer>
+</div>
+</main>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Theme toggle: light by default, dark on request, remembered per browser
+  const root = document.documentElement, tt = document.getElementById('themeToggle');
+  const syncToggle = () => tt.setAttribute('aria-label', root.dataset.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+  tt.addEventListener('click', () => {
+    const dark = root.dataset.theme !== 'dark';
+    if (dark) root.dataset.theme = 'dark'; else delete root.dataset.theme;
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+    syncToggle();
+  });
+  syncToggle();
+
+  // Reveal on scroll
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+  document.querySelectorAll('.reveal').forEach(el => reduce ? el.classList.add('in') : io.observe(el));
+
+  // Duplicate marquee track for seamless loop
+  const track = document.querySelector('.marquee .track');
+  track.innerHTML += track.innerHTML.replace(/<img /g, '<img aria-hidden="true" ');
+
+  // GitHub stars (optional)
+  fetch('https://api.github.com/repos/irfanabdulhameed/clipnpaste').then(r => r.ok ? r.json() : null).then(d => {
+    if (d && typeof d.stargazers_count === 'number') document.getElementById('stars').textContent = ' · ' + d.stargazers_count.toLocaleString();
+  }).catch(() => {});
+
+  // Panel demo
+  const panel = document.getElementById('panel'), cardsEl = document.getElementById('cards');
+  const cards = [...cardsEl.querySelectorAll('.card')], body = document.getElementById('noteBody');
+  const hint = document.getElementById('hint'), demo = document.getElementById('demo');
+  let open = false, sel = 0, pastes = 0;
+  const select = i => { sel = (i + cards.length) % cards.length; cards.forEach((c, j) => c.setAttribute('aria-selected', j === sel)); cards[sel].scrollIntoView({ block: 'nearest', inline: 'nearest' }); };
+  const show = () => {
+    open = true; panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false');
+    cardsEl.classList.remove('opening'); void cardsEl.offsetWidth; cardsEl.classList.add('opening');
+    cards.forEach((c, i) => c.style.animationDelay = (i * 45) + 'ms');
+    select(0); hint.innerHTML = '<kbd>←</kbd> <kbd>→</kbd> to move, <kbd>Return</kbd> to paste, <kbd>Esc</kbd> to close';
+  };
+  const hide = () => { open = false; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); hint.innerHTML = 'Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V</kbd> or <button type="button" id="openBtn">open the panel</button> again'; bindOpen(); };
+  const paste = i => {
+    const c = cards[i], caret = body.querySelector('.caret'), s = document.createElement('span');
+    s.className = 'pasted';
+    if (c.dataset.paste === '[photo]') { s.innerHTML = '<span style="display:inline-block;width:80px;height:48px;border-radius:6px;vertical-align:middle;background:linear-gradient(160deg,#89c4f4,#3f7cac 55%,#264653)"></span>'; }
+    else s.textContent = c.dataset.paste;
+    caret.before(s);
+    if (++pastes < 4) { const p = document.createElement('p'); p.innerHTML = ['Photo for the group chat: ', 'Banner colour: ', 'Repo: '][pastes - 1]; body.appendChild(p); p.appendChild(caret); }
+    hide();
+  };
+  const bindOpen = () => { const b = document.getElementById('openBtn'); if (b) b.onclick = show; };
+  bindOpen();
+  cards.forEach((c, i) => { c.addEventListener('click', () => paste(i)); c.addEventListener('mouseenter', () => open && select(i)); });
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.metaKey && e.key.toLowerCase() === 'v') { e.preventDefault(); open ? hide() : (show(), demo.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })); return; }
+    if (!open) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); select(sel + 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); select(sel - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); paste(sel); }
+    else if (e.key === 'Escape') hide();
+  });
+
+  // Steps → terminal
+  const SCRIPTS = [
+`<span class="c"># 1. Tools and code</span>
+<span class="p">$</span> xcode-select --install
+<span class="p">$</span> git clone https://github.com/&lt;you&gt;/clipnpaste.git
+<span class="p">$</span> cd clipnpaste
+<span class="p">$</span> git switch -c fix/my-first-change`,
+`<span class="c"># 2. Build, install in ~/Applications and open</span>
+<span class="p">$</span> ./scripts/build.sh --run
+<span class="o">✓ Clipnpaste.app built and opened — check the menu bar</span>
+
+<span class="c"># build only, don't install</span>
+<span class="p">$</span> INSTALL=0 ./scripts/build.sh
+
+<span class="c"># keep Accessibility across rebuilds</span>
+<span class="p">$</span> CLIPNPASTE_SIGN_ID="My Certificate" ./scripts/build.sh`,
+`<span class="c"># 3. Change code in Sources/, add a test in Tests/</span>
+<span class="p">$</span> ./scripts/test.sh
+<span class="o">✓ 125 tests passed</span>
+
+<span class="c"># build the downloadable disk image</span>
+<span class="p">$</span> ./scripts/make-dmg.sh`,
+`<span class="c"># 4. Push and open a pull request</span>
+<span class="p">$</span> git commit -am "Fix the thing, and say why"
+<span class="p">$</span> git push -u origin fix/my-first-change
+<span class="p">$</span> gh pr create --web`
+  ];
+  const out = document.getElementById('termOut'), steps = [...document.querySelectorAll('#steps li')];
+  let cur = 0;
+  const setStep = i => { cur = i; steps.forEach((s, j) => s.classList.toggle('on', j === i)); out.innerHTML = SCRIPTS[i]; };
+  steps.forEach((s, i) => s.addEventListener('click', () => setStep(i)));
+  setStep(0);
+  document.getElementById('copyBtn').addEventListener('click', e => {
+    const cmds = out.textContent.split('\n').filter(l => l.startsWith('$ ')).map(l => l.slice(2)).join('\n');
+    navigator.clipboard?.writeText(cmds).then(() => { e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy', 1400); });
+  });
+})();
+</script>
+</body>
+</html>
