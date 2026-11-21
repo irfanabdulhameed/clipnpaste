@@ -315,6 +315,7 @@ final class PanelController {
     /// Pasteboard privacy set to ask or deny: the second banner.
     static var pasteboardAsks: Bool {
         if DiagnosticFlags.pasteboardBanner { return true }
+        guard #available(macOS 15.4, *) else { return false }
         let b = NSPasteboard.general.accessBehavior
         return b == .ask || b == .alwaysDeny
     }

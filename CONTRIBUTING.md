@@ -13,7 +13,7 @@ cd clipnpaste
 ./scripts/test.sh                                       # run the tests
 ```
 
-Requires macOS 26. Set `CLIPNPASTE_SIGN_ID` to a certificate of your own to keep the
+Requires macOS 15 or later. Set `CLIPNPASTE_SIGN_ID` to a certificate of your own to keep the
 Accessibility permission across rebuilds.
 
 ## Where things go

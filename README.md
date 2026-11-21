@@ -7,7 +7,7 @@
 **A free, open-source clipboard manager for Mac, with a Liquid Glass panel.**
 
 ![Latest release](https://img.shields.io/github/v/release/irfanabdulhameed/clipnpaste?label=release&color=5b3fd6)
-![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000?logo=apple&logoColor=white)
+![macOS 15+](https://img.shields.io/badge/macOS-15%2B-000?logo=apple&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![No dependencies](https://img.shields.io/badge/dependencies-0-2ea44f)
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
@@ -47,7 +47,7 @@ Every text and image you copy is saved. Press <kbd>⌃</kbd><kbd>⌘</kbd><kbd>V
 
 ## Install
 
-1. [Download Clipnpaste.dmg](https://github.com/irfanabdulhameed/clipnpaste/releases/latest/download/Clipnpaste.dmg) and drag **Clipnpaste** to **Applications**. Requires macOS 26 Tahoe.
+1. [Download Clipnpaste.dmg](https://github.com/irfanabdulhameed/clipnpaste/releases/latest/download/Clipnpaste.dmg) and drag **Clipnpaste** to **Applications**. Requires macOS 15 Sequoia or later (Liquid Glass on macOS 26; a classic blur on 15).
 2. Open it. It isn't notarized yet, so macOS blocks it the first time: click **Done**, then go to **System Settings › Privacy & Security** and click **Open Anyway**.
 3. Turn on **Accessibility** for Clipnpaste in **System Settings › Privacy & Security › Accessibility**. It's used only to send <kbd>⌘</kbd><kbd>V</kbd> to your app. Without it, the clip is put on the clipboard and you paste it yourself.
 
@@ -84,7 +84,7 @@ Drag the pill at the top of the panel to resize it to one, two or three rows. Se
 
 ## Build from source
 
-Needs macOS 26 and the Command Line Tools (`xcode-select --install`). No Xcode, no third-party dependencies.
+Needs macOS 15 or later and the Command Line Tools (`xcode-select --install`). No Xcode, no third-party dependencies.
 
 ```bash
 git clone https://github.com/irfanabdulhameed/clipnpaste.git
@@ -120,7 +120,7 @@ Bug reports, fixes, features, docs and accessibility testing are all welcome. St
 ## FAQ
 
 <details><summary><b>Does it work on Intel Macs?</b></summary>
-It builds for whatever Mac you build it on, Apple Silicon or Intel, as long as it runs macOS 26.
+It builds for whatever Mac you build it on, Apple Silicon or Intel, as long as it runs macOS 15 or later.
 </details>
 
 <details><summary><b>Is it safe? Does it save passwords?</b></summary>

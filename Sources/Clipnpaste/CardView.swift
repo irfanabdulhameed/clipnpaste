@@ -37,7 +37,7 @@ struct CardView: View {
             case .text:
                 Text(ClipText.preview(clip.plainText ?? ""))
                     .font(.system(size: 13))
-                    .lineHeight(.exact(points: CGFloat(PanelGeometry.lineHeight)))
+                    .exactLineHeight(CGFloat(PanelGeometry.lineHeight), fontSize: 13)
                     .foregroundStyle(theme.label)
                     .lineLimit(geometry.lines)
                     .truncationMode(.tail)
@@ -306,6 +306,20 @@ struct Checkerboard: View {
                     ctx.fill(Path(rect), with: .color((r + c) % 2 == 0 ? b : a))
                 }
             }
+        }
+    }
+}
+
+private extension View {
+    /// A fixed line height: exact on macOS 26, line spacing to match on earlier systems.
+    @ViewBuilder
+    func exactLineHeight(_ points: CGFloat, fontSize: CGFloat) -> some View {
+        if #available(macOS 26.0, *) {
+            lineHeight(.exact(points: points))
+        } else {
+            let font = NSFont.systemFont(ofSize: fontSize)
+            let natural = ceil(font.ascender - font.descender + font.leading)
+            lineSpacing(max(0, points - natural))
         }
     }
 }

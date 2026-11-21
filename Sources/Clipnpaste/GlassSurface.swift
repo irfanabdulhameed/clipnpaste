@@ -100,21 +100,19 @@ final class GlassSurface: NSView {
         let view: NSView
         switch material {
         case .glass:
-            let glass = NSGlassEffectView(frame: bounds)
-            glass.style = .regular
-            glass.cornerRadius = cornerRadius
-            glass.contentView = content
-            content.frame = glass.bounds
-            view = glass
+            if #available(macOS 26.0, *) {
+                let glass = NSGlassEffectView(frame: bounds)
+                glass.style = .regular
+                glass.cornerRadius = cornerRadius
+                glass.contentView = content
+                content.frame = glass.bounds
+                view = glass
+            } else {
+                // Liquid Glass needs macOS 26; earlier systems get the classic blur.
+                view = classicBlur()
+            }
         case .classic:
-            let blur = NSVisualEffectView(frame: bounds)
-            blur.material = .popover
-            blur.blendingMode = .behindWindow
-            blur.state = .active
-            blur.maskImage = Self.roundedMask(cornerRadius)
-            content.frame = blur.bounds
-            blur.addSubview(content)
-            view = blur
+            view = classicBlur()
         case .opaque:
             let plain = NSView(frame: bounds)
             plain.wantsLayer = true
@@ -132,6 +130,17 @@ final class GlassSurface: NSView {
         addSubview(borderView, positioned: .above, relativeTo: view)
         updateColors()
         needsLayout = true
+    }
+
+    private func classicBlur() -> NSView {
+        let blur = NSVisualEffectView(frame: bounds)
+        blur.material = .popover
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.maskImage = Self.roundedMask(cornerRadius)
+        content.frame = blur.bounds
+        blur.addSubview(content)
+        return blur
     }
 
     private func updateColors() {
