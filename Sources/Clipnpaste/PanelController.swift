@@ -55,7 +55,11 @@ final class PanelController {
     let prefs = Preferences.app
 
     /// Closed, opening, open or closing (see PanelMotion.swift).
-    var phase: PanelPhase = .closed
+    var phase: PanelPhase = .closed {
+        didSet { if phase != oldValue, phase == .opening || phase == .closing { watchTransition() } }
+    }
+    /// Counts phase changes, so a watchdog that fires late knows the transition it was set for is over.
+    private var transitionToken = 0
     /// Opening or open: the panel takes keys and clicks. A closing panel is still on screen.
     var isOpen: Bool { phase == .opening || phase == .open }
     /// When the last paste was picked; an update waits a moment after it so the ⌘V lands first.
@@ -139,7 +143,13 @@ final class PanelController {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.refreshDisplayOptions() } })
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.close() } })
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.screensChanged() } })
+        // After sleep the display link may be dead; a fresh one is made before anything moves.
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.screensChanged() } })
+        }
         // Settings apply at once, open or closed.
         prefs.observe { [weak self] key in
             guard let self else { return }
@@ -176,10 +186,17 @@ final class PanelController {
 
     // MARK: Open and close
 
-    func toggle() { isOpen ? close() : open() }
+    func toggle() {
+        recoverIfStuck()
+        isOpen ? close() : open()
+    }
 
     func open() {
-        if phase == .closing { return reopenMidExit() }
+        recoverIfStuck()
+        if phase == .closing {
+            MotionClock.shared.use(screen: screen)
+            return reopenMidExit()
+        }
         guard phase == .closed else { return }
         let started = CACurrentMediaTime()
         Diagnostics.shared.triggered()
@@ -228,6 +245,64 @@ final class PanelController {
         if DebugFlags.demoStates { applyDemoStates() }
         logOpen(ms: (CACurrentMediaTime() - started) * 1000)
         if DebugFlags.logGeometry { debugLog("open steps: " + marks.map { "\($0.0) \(String(format: "%.1f", $0.1))" }.joined(separator: ", ")) }
+    }
+
+    // MARK: Stuck transitions
+
+    /// The open and the exit end only on the display link's frames. If the link dies mid-way (a
+    /// display unplugged or asleep, the Mac waking), the phase would stay opening or closing for
+    /// good and every shortcut press would flip between the two with nothing on screen. So each
+    /// transition is watched: a fresh link if it runs long, then a jump to its end.
+    private func watchTransition() {
+        transitionToken += 1
+        guard !DebugFlags.drivesPanel else { return }
+        let token = transitionToken
+        let scale = MotionClock.shared.timeScale
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 * scale) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.transitionToken == token, self.isTransitioning else { return }
+                appLog("Panel \(self.phase) ran long; reconnecting the display link")
+                MotionClock.shared.reconnect()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0 * scale) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.transitionToken == token, self.isTransitioning else { return }
+                appLog("Panel \(self.phase) never finished; ending it now")
+                self.forceFinishTransition()
+            }
+        }
+    }
+
+    private var isTransitioning: Bool { phase == .opening || phase == .closing }
+
+    /// Called before acting on the shortcut: a transition far past its length is ended first, so
+    /// the press acts on a settled panel.
+    private func recoverIfStuck() {
+        guard isTransitioning, MotionClock.shared.isStalled else { return }
+        appLog("Panel \(phase) stalled; ending it before the shortcut acts")
+        forceFinishTransition()
+    }
+
+    /// Ends the open or the exit now: every running motion jumps to its end (which runs `opened`
+    /// or `finishClose`), and a fresh display link is ready for the next one.
+    private func forceFinishTransition() {
+        MotionClock.shared.finishAll()
+        if phase == .closing { cutExit() }
+        if phase == .opening {
+            rise.y.set(0); rise.op.set(1); rise.scale.set(1)
+            renderRise(sample: false)
+            opened()
+        }
+        MotionClock.shared.reconnect()
+    }
+
+    /// Screens changed, or the Mac woke: a new display link, and a panel that was showing goes at
+    /// once rather than on an exit that may never get a frame.
+    private func screensChanged() {
+        MotionClock.shared.reconnect()
+        if isOpen { close() }
+        if phase == .closing { cutExit() }
     }
 
     /// The shortcut pressed while the panel leaves: it turns back from where it is.

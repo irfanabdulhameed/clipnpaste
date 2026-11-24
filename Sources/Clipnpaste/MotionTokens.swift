@@ -79,15 +79,54 @@ final class MotionClock: NSObject {
     /// Nothing is moving and nothing is waiting to draw.
     var isIdle: Bool { active.isEmpty && hooks.isEmpty && dirty.isEmpty }
 
-    /// Follows the screen the panel is on, so the frame rate is that display's.
-    func use(screen: NSScreen?) {
-        guard let screen = screen ?? NSScreen.main, screen != self.screen || link == nil else { return }
+    /// When the link last ticked, or was last unpaused: a running link that has been silent for
+    /// longer than `stallLimit` is stalled.
+    private var heardAt: CFTimeInterval = 0
+    private static let stallLimit = 0.25
+
+    /// Follows the screen the panel is on, so the frame rate is that display's. With `force`, or
+    /// when the link has stalled, a new link is made even on the same screen.
+    func use(screen: NSScreen?, force: Bool = false) {
+        guard let screen = Self.live(screen) ?? Self.live(self.screen) ?? NSScreen.main ?? NSScreen.screens.first,
+              force || isStalled || screen != self.screen || link == nil else { return }
         self.screen = screen
         link?.invalidate()
         let l = screen.displayLink(target: self, selector: #selector(tick(_:)))
         l.add(to: .main, forMode: .common)
         l.isPaused = isIdle
         link = l
+        heardAt = CACurrentMediaTime()
+        if !isIdle { lastTarget = heardAt }
+    }
+
+    /// The screen, if it is still attached.
+    private static func live(_ s: NSScreen?) -> NSScreen? {
+        guard let s else { return nil }
+        let id = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        return NSScreen.screens.first { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber) == id }
+    }
+
+    /// Running but silent: its display went away or to sleep, so nothing it drives would ever end.
+    var isStalled: Bool {
+        guard let link, !link.isPaused, !inFrame else { return false }
+        return CACurrentMediaTime() - heardAt > Self.stallLimit
+    }
+
+    /// Drops the link and makes a fresh one on a screen still attached (screens changed, or the Mac woke).
+    func reconnect() { use(screen: nil, force: true) }
+
+    /// Ends every running motion at its destination now, completions included. The last resort
+    /// when frames can't be had at all.
+    func finishAll() {
+        var rounds = 0
+        while !active.isEmpty, rounds < 8 {
+            rounds += 1
+            for a in Array(active.values) {
+                active[ObjectIdentifier(a)] = nil
+                a.jumpToEnd()
+            }
+        }
+        flush()
     }
 
     func activate(_ a: Anim) {
@@ -125,14 +164,16 @@ final class MotionClock: NSObject {
     }
 
     private func kick() {
-        if link == nil { use(screen: nil) }
+        if link == nil || isStalled { use(screen: nil, force: true) }
         guard let link, link.isPaused, !inFrame else { return }
         lastTarget = CACurrentMediaTime()
+        heardAt = lastTarget
         link.isPaused = false
     }
 
     @objc private func tick(_ l: CADisplayLink) {
         inFrame = true
+        heardAt = CACurrentMediaTime()
         let now = l.targetTimestamp
         let dt = min(max(now - lastTarget, 0), 0.1) / timeScale
         lastTarget = now
@@ -293,6 +334,14 @@ final class Anim {
         }
         changed()
         return true
+    }
+
+    /// Straight to where it is heading, running its completion (`MotionClock.finishAll`).
+    func jumpToEnd() {
+        guard kind != nil else { return }
+        delay = 0
+        _ = finish(dest)
+        if kind == nil { MotionClock.shared.deactivate(self) } else { MotionClock.shared.activate(self) }
     }
 
     private func finish(_ to: Double) -> Bool {
