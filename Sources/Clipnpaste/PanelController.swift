@@ -154,7 +154,7 @@ final class PanelController {
         prefs.observe { [weak self] key in
             guard let self else { return }
             switch key {
-            case .glass, .reduceMotion, .cardButtons: refreshDisplayOptions()
+            case .glass, .cardButtons: refreshDisplayOptions()
             case .panelRows: applyRowsSetting()
             default: break
             }
@@ -437,8 +437,7 @@ final class PanelController {
         model.theme = Theme(
             increaseContrast: DebugFlags.increaseContrast || ws.accessibilityDisplayShouldIncreaseContrast,
             reduceTransparency: DebugFlags.reduceTransparency || ws.accessibilityDisplayShouldReduceTransparency,
-            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion
-                || prefs.reduceMotion == .always)
+            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion)
         Motion.reduce = model.theme.reduceMotion
         if model.buttonsAlways != (prefs.cardButtons == .always) { model.buttonsAlways = prefs.cardButtons == .always }
         surface.material = material

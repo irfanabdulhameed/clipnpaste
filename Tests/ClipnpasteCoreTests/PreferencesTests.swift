@@ -15,14 +15,8 @@ import Foundation
         let (d, name) = suite()
         defer { d.removePersistentDomain(forName: name) }
         let p = Preferences(defaults: d)
-        #expect(p.dragTilt == .speed)
         #expect(p.dragOut == .strip)
         #expect(p.afterDrop == .growBack)
-        #expect(p.cardPop == 1.08)
-        #expect(p.selection == .slide)
-        #expect(p.entrance == .stagger)
-        #expect(p.reduceMotion == .system)
-        #expect(p.slowMotion == false)
         #expect(p.panelRows == 1)
         #expect(p.cardButtons == .hoverAndSelected)
         #expect(p.appearance == .system)
@@ -47,13 +41,8 @@ import Foundation
         let (d, name) = suite()
         defer { d.removePersistentDomain(forName: name) }
         let p = Preferences(defaults: d)
-        p.dragTilt = .fixed45
         p.dragOut = .slide
         p.afterDrop = .close
-        p.cardPop = 1.03
-        p.selection = .flip
-        p.entrance = .together
-        p.reduceMotion = .always
         p.panelRows = 3
         p.cardButtons = .always
         p.appearance = .dark
@@ -71,13 +60,8 @@ import Foundation
         p.welcomed = true
 
         let q = Preferences(defaults: d)
-        #expect(q.dragTilt == .fixed45)
         #expect(q.dragOut == .slide)
         #expect(q.afterDrop == .close)
-        #expect(q.cardPop == 1.03)
-        #expect(q.selection == .flip)
-        #expect(q.entrance == .together)
-        #expect(q.reduceMotion == .always)
         #expect(q.panelRows == 3)
         #expect(q.cardButtons == .always)
         #expect(q.appearance == .dark)
@@ -96,26 +80,25 @@ import Foundation
         #expect(q.welcomed)
     }
 
-    @Test func slowMotionIsNeverSaved() {
+    @Test func retiredMotionChoicesAreDropped() {
         let (d, name) = suite()
         defer { d.removePersistentDomain(forName: name) }
+        for key in Preferences.retiredKeys { d.set("old", forKey: key) }
+        d.set("slide", forKey: "dragOut")
         let p = Preferences(defaults: d)
-        p.slowMotion = true
-        #expect(p.slowMotion)
-        #expect(Preferences(defaults: d).slowMotion == false)
+        #expect(Preferences.retiredKeys.allSatisfy { d.object(forKey: $0) == nil })
+        #expect(p.dragOut == .slide)
     }
 
     @Test func badSavedValuesFallBackToDefaults() {
         let (d, name) = suite()
         defer { d.removePersistentDomain(forName: name) }
-        d.set("sideways", forKey: "dragTilt")
-        d.set(1.5, forKey: "cardPop")
+        d.set("sideways", forKey: "dragOut")
         d.set(9, forKey: "panelRows")
         d.set(-4, forKey: "autoClearDays")
         d.set(0, forKey: "maxClips")
         let p = Preferences(defaults: d)
-        #expect(p.dragTilt == .speed)
-        #expect(p.cardPop == 1.08)
+        #expect(p.dragOut == .strip)
         #expect(p.panelRows == 3)
         #expect(p.autoClearDays == 0)
         #expect(p.maxClips == 1)
@@ -129,8 +112,8 @@ import Foundation
         let token = p.observe { heard.append($0) }
         p.glass = .classic
         p.panelRows = 2
-        p.slowMotion = true
-        #expect(heard == [.glass, .panelRows, .slowMotion])
+        p.afterDrop = .close
+        #expect(heard == [.glass, .panelRows, .afterDrop])
         p.removeObserver(token)
         p.glass = .liquid
         #expect(heard.count == 3)

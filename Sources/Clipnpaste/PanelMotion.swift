@@ -171,10 +171,10 @@ extension PanelController {
     }
 
     /// Cards in view, in reading order, each coming into focus: 20 → 0 pt blur, 1.06 → 1, 16 pt
-    /// rise on `focus` over 600 ms, opacity over 300 ms, 40 ms + 12 ms × its place, or all at 40 ms when Settings › Motion › Card
-    /// entrance is Together. The selection ring rides its card.
+    /// rise on `focus` over 600 ms, opacity over 300 ms, 40 ms + 12 ms × its place. The selection
+    /// ring rides its card.
     private func entrance() {
-        let stagger = prefs.entrance == .stagger ? 12.0 : 0
+        let stagger = 12.0
         for (i, m) in cardsInView().enumerated() {
             board.born(m, blur: 20, delay: 40 + stagger * Double(i), scale: 1.06, rise: 16, focus: true)
         }

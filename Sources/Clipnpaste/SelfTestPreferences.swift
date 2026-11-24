@@ -91,55 +91,22 @@ extension PanelController {
         p.cardButtons = .hoverAndSelected
         check("Card buttons Hover + selected: they hide again", !model.state(for: other).buttonsShown)
 
-        // Motion › Card pop and Selection change
+        // The fixed motion: card pop 1.08, sliding highlight, drag tilt −6° + speed.
         if !rm {
             await wait(200)
-            p.cardPop = 1.03
             let id1 = model.clips[1].id
             var peak = 1.0
             board.motions[id1]?.pop.probe = { peak = max(peak, $0) }
             key(kVK_RightArrow)
-            await settle()
-            board.motions[id1]?.pop.probe = nil
-            check("Card pop 1.03: the selected card pops to 1.03", abs(peak - 1.03) < 0.001, "peak \(f(peak))")
-            p.cardPop = 1.08
-
-            await wait(200)
-            p.selection = .flip
-            key(kVK_RightArrow)
-            check("Selection One-frame flip: the ring is on the new card at once",
-                  !board.ring.busy && board.ring.cardID == model.selectedID && board.ring.ox.v == 0, "ring offset \(f(board.ring.ox.v))")
-            await settle()
-            await wait(200)
-            p.selection = .slide
-            key(kVK_RightArrow)
-            check("Selection Sliding highlight: the ring slides to the new card", board.ring.busy && abs(board.ring.ox.v) > 1,
+            check("Selection: the ring slides to the new card", board.ring.busy && abs(board.ring.ox.v) > 1,
                   "ring offset \(f(board.ring.ox.v))")
             await settle()
+            board.motions[id1]?.pop.probe = nil
+            check("Card pop: the selected card pops to 1.08", abs(peak - 1.08) < 0.001, "peak \(f(peak))")
             selectIndex(0)
             await settle()
-        }
 
-        // Motion › Reduce Motion and Slow motion
-        let systemReduce = Motion.reduce
-        p.reduceMotion = .always
-        check("Reduce Motion Always on: the panel reduces motion at once", Motion.reduce && model.theme.reduceMotion)
-        p.reduceMotion = .system
-        check("Reduce Motion Follow system: back to the system's setting", Motion.reduce == systemReduce)
-        p.slowMotion = true
-        check("Slow motion ×5: the motion clock runs five times slower", MotionClock.shared.timeScale == max(5, DebugFlags.slowMotion))
-        p.slowMotion = false
-        check("Slow motion off: normal speed", MotionClock.shared.timeScale == DebugFlags.slowMotion)
-
-        // Motion › Drag tilt
-        if !rm {
-            p.dragTilt = .fixed45
-            var a = await lift(dx: 48, dy: 0)
-            let fixed = drag?.preview.rot.v
-            check("Drag tilt −45°: the lifted card leans −45°", drag != nil && abs((fixed ?? 0) + 45) < 0.5, "tilt \(f(fixed))")
-            await drop(a)
-            p.dragTilt = .speed
-            a = await lift(dx: 48, dy: 0)
+            let a = await lift(dx: 48, dy: 0)
             let speed = drag?.preview.rot.v
             check("Drag tilt −6° + speed: the lifted card leans within −14…+2°", drag != nil && (speed.map { $0 >= -14 && $0 <= 2 } ?? false),
                   "tilt \(f(speed))")
@@ -180,8 +147,8 @@ extension PanelController {
         mouse(.leftMouseUp, a)
         p.afterDrop = .growBack
 
-        // Motion › Card entrance: the spread of the cards' fade at the frame the first is 30% in.
-        func entranceSpread() async -> Double? {
+        // The fixed card entrance: a 12 ms stagger, the spread of the cards' fade at the frame the first is 30% in.
+        if !rm {
             open()
             let cards = cardsInView()
             let start = CACurrentMediaTime()
@@ -190,15 +157,8 @@ extension PanelController {
             await settle()
             close()
             await settle()
-            return cards.count > 1 ? (ops.max() ?? 0) - (ops.min() ?? 0) : nil
-        }
-        if !rm {
-            p.entrance = .together
-            let together = await entranceSpread()
-            check("Card entrance Together: every card arrives at once", together.map { $0 < 0.02 } ?? true, "spread \(f(together))")
-            p.entrance = .stagger
-            let stagger = await entranceSpread()
-            check("Card entrance 12 ms stagger: the cards arrive one after another", stagger.map { $0 > 0.1 } ?? true, "spread \(f(stagger))")
+            let spread: Double? = cards.count > 1 ? (ops.max() ?? 0) - (ops.min() ?? 0) : nil
+            check("Card entrance: the cards arrive one after another", spread.map { $0 > 0.1 } ?? true, "spread \(f(spread))")
         }
 
         // General › Open the panel on

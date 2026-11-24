@@ -316,7 +316,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
         theme = Theme(
             increaseContrast: DebugFlags.increaseContrast || ws.accessibilityDisplayShouldIncreaseContrast,
             reduceTransparency: DebugFlags.reduceTransparency || ws.accessibilityDisplayShouldReduceTransparency,
-            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion || prefs.reduceMotion == .always)
+            reduceMotion: DebugFlags.reduceMotion || ws.accessibilityDisplayShouldReduceMotion)
         Motion.reduce = theme.reduceMotion
         surface.material = theme.reduceTransparency || prefs.glass == .solid ? .opaque : (prefs.glass == .classic ? .classic : .glass)
         surface.increaseContrast = theme.increaseContrast

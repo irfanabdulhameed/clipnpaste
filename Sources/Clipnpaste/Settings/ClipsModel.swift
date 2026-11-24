@@ -66,6 +66,8 @@ final class ClipsModel {
     var columns = 1
     /// Left and right of the grid: at least `inset`, with the leftover split so the grid is centred.
     private(set) var sidePadding = ClipsModel.inset
+    /// At most this many columns; a wider window centres them.
+    static let maxColumns = 4
     /// The grid has the keyboard: the selection ring is the accent colour, else grey.
     var gridFocused = false
     /// `--settings-preview`: show the grid as focused in a window that is never key.
@@ -175,14 +177,19 @@ final class ClipsModel {
 
     func clip(_ id: UUID) -> Clip? { index[id].map { clips[$0] } }
 
-    /// Fits whole columns of cards into `width`, as the panel fits its row.
+    /// Fits whole columns of the panel's fixed-size cards into `width`, at most `maxColumns`, and
+    /// centres them.
     func layout(width: CGFloat) {
-        let w = CGFloat(Self.geometry.cardWidth)
-        let n = max(Int((width - 2 * Self.inset + Self.gap) / (w + Self.gap)), 1)
-        let grid = CGFloat(n) * w + CGFloat(n - 1) * Self.gap
-        let side = max(Self.inset, ((width - grid) / 2).rounded(.down))
-        if n != columns { columns = n }
-        if side != sidePadding { sidePadding = side }
+        let g = Self.gridLayout(width: width)
+        if g.columns != columns { columns = g.columns }
+        if g.side != sidePadding { sidePadding = g.side }
+    }
+
+    static func gridLayout(width: CGFloat) -> (columns: Int, side: CGFloat) {
+        let w = CGFloat(geometry.cardWidth)
+        let n = min(max(Int((width - 2 * inset + gap) / (w + gap)), 1), maxColumns)
+        let grid = CGFloat(n) * w + CGFloat(n - 1) * gap
+        return (n, max(inset, ((width - grid) / 2).rounded(.down)))
     }
 
     // MARK: What a card shows

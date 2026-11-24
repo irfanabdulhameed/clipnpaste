@@ -6,7 +6,7 @@ import Observation
 @MainActor @Observable
 public final class Preferences {
     public enum Key: String, CaseIterable, Sendable {
-        case dragTilt, dragOut, afterDrop, cardPop, selection, entrance, reduceMotion, slowMotion
+        case dragOut, afterDrop
         case panelRows, cardButtons, appearance, glass
         case openOn, showMenuBarIcon, showInDock
         case maxClips, maxImageBytes, autoClearDays, ignoredApps, captureUniversalClipboard
@@ -14,18 +14,13 @@ public final class Preferences {
         case checkForUpdates, lastUpdateCheck
     }
 
-    public enum DragTilt: String, CaseIterable, Sendable { case speed, fixed45 = "45" }
     public enum DragOut: String, CaseIterable, Sendable { case strip, slide, stay }
     public enum AfterDrop: String, CaseIterable, Sendable { case growBack = "grow", close }
-    public enum Selection: String, CaseIterable, Sendable { case slide, flip }
-    public enum Entrance: String, CaseIterable, Sendable { case stagger, together }
-    public enum ReduceMotion: String, CaseIterable, Sendable { case system, always }
     public enum CardButtons: String, CaseIterable, Sendable { case hoverAndSelected = "hover", always }
     public enum Appearance: String, CaseIterable, Sendable { case system, light, dark }
     public enum Glass: String, CaseIterable, Sendable { case liquid, classic, solid }
     public enum Screen: String, CaseIterable, Sendable { case pointer, main }
 
-    public static let cardPops = [1.03, 1.08]
     public static let rowChoices = [1, 2, 3]
     public static let clipChoices = [500, 1_000, 2_500, 5_000, 10_000, 25_000]
     public static let imageChoices: [Int64] = [500_000_000, 1_000_000_000, 2_000_000_000, 5_000_000_000, 10_000_000_000]
@@ -33,15 +28,8 @@ public final class Preferences {
     public static let autoClearChoices = [1, 7, 30, 90, 365, 0]
 
     // Motion
-    public var dragTilt: DragTilt = .speed { didSet { put(dragTilt.rawValue, .dragTilt) } }
     public var dragOut: DragOut = .strip { didSet { put(dragOut.rawValue, .dragOut) } }
     public var afterDrop: AfterDrop = .growBack { didSet { put(afterDrop.rawValue, .afterDrop) } }
-    public var cardPop: Double = 1.08 { didSet { put(cardPop, .cardPop) } }
-    public var selection: Selection = .slide { didSet { put(selection.rawValue, .selection) } }
-    public var entrance: Entrance = .stagger { didSet { put(entrance.rawValue, .entrance) } }
-    public var reduceMotion: ReduceMotion = .system { didSet { put(reduceMotion.rawValue, .reduceMotion) } }
-    /// Slow motion ×5 is for inspecting curves: it lasts until the app quits and is never saved.
-    public var slowMotion = false { didSet { changed(.slowMotion) } }
 
     // Panel
     /// Rows the panel opens at; dragging the pill changes it too.
@@ -85,8 +73,13 @@ public final class Preferences {
     @ObservationIgnored private var observers: [UUID: @MainActor (Key) -> Void] = [:]
     @ObservationIgnored private var loading = false
 
+    /// Settings that were once choices and are now fixed (drag tilt −6° + speed, card pop 1.08,
+    /// sliding highlight, 12 ms stagger, Reduce Motion from the system): saved values are dropped.
+    public static let retiredKeys = ["dragTilt", "cardPop", "selection", "entrance", "reduceMotion", "slowMotion"]
+
     public init(defaults: UserDefaults) {
         self.defaults = defaults
+        for key in Self.retiredKeys { defaults.removeObject(forKey: key) }
         load()
     }
 
@@ -117,14 +110,8 @@ public final class Preferences {
         func number(_ key: Key) -> Double? { (d.object(forKey: key.rawValue) as? NSNumber)?.doubleValue }
         func flag(_ key: Key, _ fallback: Bool) -> Bool { (d.object(forKey: key.rawValue) as? NSNumber)?.boolValue ?? fallback }
 
-        dragTilt = pick(.dragTilt, DragTilt.speed)
         dragOut = pick(.dragOut, DragOut.strip)
         afterDrop = pick(.afterDrop, AfterDrop.growBack)
-        cardPop = number(.cardPop).flatMap { v in Self.cardPops.first { abs($0 - v) < 0.0001 } } ?? 1.08
-        selection = pick(.selection, Selection.slide)
-        entrance = pick(.entrance, Entrance.stagger)
-        reduceMotion = pick(.reduceMotion, ReduceMotion.system)
-        slowMotion = false
         panelRows = number(.panelRows).map { min(max(Int($0), 1), 3) } ?? 1
         cardButtons = pick(.cardButtons, CardButtons.hoverAndSelected)
         appearance = pick(.appearance, Appearance.system)

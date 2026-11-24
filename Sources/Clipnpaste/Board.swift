@@ -616,8 +616,7 @@ final class Board {
         // Now, so the slide starts on the same frame as the scroll to the selection and they move in step.
         renderRing()
         guard !Motion.reduce, let m = motions[id] else { return }
-        // 1.08 or 1.03, from Settings › Motion › Card pop.
-        if pop == .force || (pop == .normal && !held) { m.pop.pop(Preferences.app.cardPop) }
+        if pop == .force || (pop == .normal && !held) { m.pop.pop() }
     }
 
     /// Draws the ring around the selected card. When the selection changes while the ring shows,
@@ -640,7 +639,7 @@ final class Board {
         if r.cardID != id {
             let from = r.cardID != nil && !r.view.isHidden ? r.drawn : nil
             r.cardID = id
-            if let from, !Motion.reduce, Preferences.app.selection == .slide {
+            if let from, !Motion.reduce {
                 let duration = m.x.busy || m.y.busy ? Motion.settle : Motion.quick
                 for (a, d) in [(r.ox, from.x - m.x.v), (r.oy, from.y - m.y.v)] {
                     let v = a.velocity

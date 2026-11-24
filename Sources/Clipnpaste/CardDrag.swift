@@ -260,7 +260,7 @@ extension PanelController {
         } else {
             preview.sc.spring(to: 1.04, duration: Motion.quick)
             preview.lift.spring(to: 1, duration: Motion.quick)
-            preview.rot.spring(to: prefs.dragTilt == .fixed45 ? -45 : DragTilt.lift, duration: Motion.settle)
+            preview.rot.spring(to: DragTilt.lift, duration: Motion.settle)
         }
         d.hook = MotionClock.shared.addHook { [weak self, weak d] dt in
             guard let self, let d else { return }
@@ -278,8 +278,8 @@ extension PanelController {
             let p = NSEvent.mouseLocation
             if p != d.pointer { dragMoved(d, to: p, time: ProcessInfo.processInfo.systemUptime) }
         }
-        // −6° plus up to ±8° from horizontal speed; the −45° alternative holds still.
-        if !Motion.reduce, prefs.dragTilt == .speed {
+        // −6° plus up to ±8° from horizontal speed.
+        if !Motion.reduce {
             let v = d.velocity.velocity(at: ProcessInfo.processInfo.systemUptime)
             d.preview.rot.spring(to: DragTilt.angle(velocityX: v.x), duration: Motion.track)
         }

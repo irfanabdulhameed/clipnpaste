@@ -233,6 +233,16 @@ enum ClipsSelfCheck {
         let model = ClipsModel(store: env.store, watcher: env.watcher)
         model.copyInterceptor = { copied.append($0.id) }
         model.revealInterceptor = { revealed.append($0) }
+        // The grid: as many whole columns of fixed-size cards as fit, at most 4, centred.
+        let cardW = CGFloat(ClipsModel.geometry.cardWidth)
+        for (width, expected): (CGFloat, Int) in [(420, 1), (520, 2), (651, 2), (700, 3), (905, 4), (1200, 4), (2400, 4)] {
+            let g = ClipsModel.gridLayout(width: width)
+            let used = CGFloat(g.columns) * cardW + CGFloat(g.columns - 1) * ClipsModel.gap
+            check("grid at \(Int(width)) pt: \(expected) columns, centred",
+                  g.columns == expected && g.side >= ClipsModel.inset && abs(width - used - 2 * g.side) <= 1,
+                  "\(g.columns) columns, side \(g.side)")
+        }
+
         model.columns = 3
         model.start()
 
